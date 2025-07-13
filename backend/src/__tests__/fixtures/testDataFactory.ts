@@ -137,12 +137,15 @@ export class TestDataFactory {
 
   // Create test STI test
   static async createTestStiTest(overrides: Partial<IStiTest> = {}): Promise<IStiTest> {
+    // Generate unique code to avoid duplicate key errors
+    const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const testData = {
-      sti_test_name: 'Test STI Test',
-      sti_test_code: 'TST001',
+      sti_test_name: `Test STI Test ${randomId}`,
+      sti_test_code: `STI-VIR-BLD-${randomId}`,
+      sti_test_type: 'máu' as const,
+      category: 'viral' as const,
       price: 100,
       description: 'Test STI test description',
-      test_type: 'Blood' as const,
       is_active: true,
       createdBy: new mongoose.Types.ObjectId(),
       ...overrides
@@ -155,9 +158,11 @@ export class TestDataFactory {
 
   // Create test STI package
   static async createTestStiPackage(overrides: Partial<IStiPackage> = {}): Promise<IStiPackage> {
+    // Generate unique code to avoid duplicate key errors
+    const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const packageData = {
-      sti_package_name: 'Test STI Package',
-      sti_package_code: 'PKG001',
+      sti_package_name: `Test STI Package ${randomId}`,
+      sti_package_code: `PKG${randomId}`,
       price: 200,
       description: 'Test STI package description',
       is_active: true,
@@ -176,10 +181,10 @@ export class TestDataFactory {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const scheduleData = {
-      test_date: tomorrow,
-      available_slots: ['09:00', '10:00', '11:00', '14:00', '15:00'],
-      max_bookings: 10,
-      current_bookings: 0,
+      order_date: tomorrow,
+      number_current_orders: 0,
+      is_locked: false,
+      is_holiday: false,
       ...overrides
     };
 

@@ -27,6 +27,13 @@ jest.mock('../services/emailNotificationService', () => ({
   }
 }));
 
+jest.mock('../utils/mailUtils', () => ({
+  MailUtils: {
+    sendStiOrderConfirmation: jest.fn().mockResolvedValue({ success: true }),
+    sendEmail: jest.fn().mockResolvedValue({ success: true })
+  }
+}));
+
 // Mock Redis client
 jest.mock('../configs/redis', () => ({
   default: {
