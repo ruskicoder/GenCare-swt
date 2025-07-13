@@ -22,6 +22,13 @@ import { StiResultRepository } from '../repositories/stiResultRepository';
 import { IStiResult, Sample, StiResult } from '../models/StiResult';
 
 export class StiService {
+    /**
+     * Validate ObjectId format
+     */
+    private static isValidObjectId(id: string): boolean {
+        return mongoose.Types.ObjectId.isValid(id);
+    }
+
     public static async createStiTest(stiTest: IStiTest): Promise<StiTestResponse> {
         try {
 
@@ -367,6 +374,49 @@ export class StiService {
 
     public static async createStiOrder(customer_id: string, sti_package_id: string, sti_test_items_input: string[], order_date: Date, notes: string): Promise<StiOrderResponse> {
         try {
+            // Input validation
+            if (!customer_id) {
+                return {
+                    success: false,
+                    message: 'Customer ID is required'
+                };
+            }
+
+            if (!order_date) {
+                return {
+                    success: false,
+                    message: 'Order date is required'
+                };
+            }
+
+            // ObjectId validation for customer
+            if (!this.isValidObjectId(customer_id)) {
+                return {
+                    success: false,
+                    message: 'Invalid customer ID format'
+                };
+            }
+
+            // ObjectId validation for package (if provided)
+            if (sti_package_id && !this.isValidObjectId(sti_package_id)) {
+                return {
+                    success: false,
+                    message: 'Invalid package ID format'
+                };
+            }
+
+            // ObjectId validation for individual tests (if provided)
+            if (sti_test_items_input && sti_test_items_input.length > 0) {
+                for (const testId of sti_test_items_input) {
+                    if (!this.isValidObjectId(testId)) {
+                        return {
+                            success: false,
+                            message: 'Invalid test ID format'
+                        };
+                    }
+                }
+            }
+
             let sti_package_item = null;
             let sti_test_items = [];
             let total_amount = 0;
@@ -523,14 +573,24 @@ export class StiService {
             if (!customer_id) {
                 return {
                     success: false,
-                    message: 'Customer_id is invalid',
+                    message: 'Customer ID is required',
                 };
             }
+
+            // ObjectId validation
+            if (!this.isValidObjectId(customer_id)) {
+                return {
+                    success: false,
+                    message: 'Invalid customer ID format'
+                };
+            }
+
             const result = await StiOrderRepository.getOrdersByCustomer(customer_id);
             if (!result || result.length === 0) {
                 return {
-                    success: false,
-                    message: `Cannot find any orders of this customer ${customer_id}`
+                    success: true,
+                    message: 'No orders found for this customer',
+                    stiorder: []
                 }
             }
             return {
@@ -652,6 +712,29 @@ export class StiService {
 
     public static async updateOrder(orderId: string, updates: Partial<IStiOrder>, userId: string, role: string) {
         try {
+            // Input validation
+            if (!orderId) {
+                return {
+                    success: false,
+                    message: 'Order ID is required'
+                };
+            }
+
+            if (!userId) {
+                return {
+                    success: false,
+                    message: 'User ID is required'
+                };
+            }
+
+            // ObjectId validation
+            if (!this.isValidObjectId(orderId)) {
+                return {
+                    success: false,
+                    message: 'Invalid order ID format'
+                };
+            }
+
             const order = await StiOrderRepository.findOrderById(orderId);
             if (!order) {
                 return {
