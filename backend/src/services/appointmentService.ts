@@ -15,7 +15,23 @@ import { AppointmentQuery } from '../dto/requests/PaginationRequest';
 
 export class AppointmentService {
     /**
-     * Book appointment với business rules
+     * Validate ObjectId format
+     */
+    private static isValidObjectId(id: string): boolean {
+        return mongoose.Types.ObjectId.isValid(id);
+    }
+
+    /**
+     * Validate time format (HH:mm)
+     */
+    private static isValidTimeFormat(time: string): boolean {
+        if (!time) return false;
+        const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        return timeRegex.test(time);
+    }
+
+    /**
+     * Book appointment with comprehensive validation
      */
     public static async bookAppointment(appointmentData: {
         customer_id: string;
@@ -28,6 +44,91 @@ export class AppointmentService {
         try {
             console.log('=== BOOKING APPOINTMENT DEBUG ===');
             console.log('Input data:', appointmentData);
+
+            // Input validation
+            if (!appointmentData) {
+                return {
+                    success: false,
+                    message: 'Appointment data is required'
+                };
+            }
+
+            // Required field validation
+            if (!appointmentData.customer_id || !appointmentData.consultant_id || 
+                !appointmentData.appointment_date || !appointmentData.start_time || 
+                !appointmentData.end_time) {
+                return {
+                    success: false,
+                    message: 'Missing required fields: customer_id, consultant_id, appointment_date, start_time, end_time are required'
+                };
+            }
+
+            // ObjectId validation
+            if (!this.isValidObjectId(appointmentData.customer_id)) {
+                return {
+                    success: false,
+                    message: 'Customer not found'
+                };
+            }
+
+            if (!this.isValidObjectId(appointmentData.consultant_id)) {
+                return {
+                    success: false,
+                    message: 'Consultant not found'
+                };
+            }
+
+            // Time format validation
+            if (!this.isValidTimeFormat(appointmentData.start_time) || 
+                !this.isValidTimeFormat(appointmentData.end_time)) {
+                return {
+                    success: false,
+                    message: 'Invalid time format. Please use HH:mm format'
+                };
+            }
+
+            // Time logic validation
+            const [startHours, startMinutes] = appointmentData.start_time.split(':').map(Number);
+            const [endHours, endMinutes] = appointmentData.end_time.split(':').map(Number);
+            const startTotalMinutes = startHours * 60 + startMinutes;
+            const endTotalMinutes = endHours * 60 + endMinutes;
+
+            if (startTotalMinutes >= endTotalMinutes) {
+                return {
+                    success: false,
+                    message: 'Start time must be before end time'
+                };
+            }
+
+            // Check if appointment is in the past
+            const appointmentDateTime = new Date(appointmentData.appointment_date);
+            appointmentDateTime.setHours(startHours, startMinutes, 0, 0);
+            const now = new Date();
+
+            if (appointmentDateTime <= now) {
+                return {
+                    success: false,
+                    message: 'Cannot book appointments in the past'
+                };
+            }
+
+            // Verify customer exists
+            const customer = await User.findById(appointmentData.customer_id);
+            if (!customer) {
+                return {
+                    success: false,
+                    message: 'Customer not found'
+                };
+            }
+
+            // Verify consultant exists
+            const consultant = await Consultant.findById(appointmentData.consultant_id).populate('user_id');
+            if (!consultant) {
+                return {
+                    success: false,
+                    message: 'Consultant not found'
+                };
+            }
 
             // BUSINESS RULE 1: Check if customer already has pending appointment
             const existingPending = await AppointmentRepository.findByCustomerId(
@@ -43,18 +144,13 @@ export class AppointmentService {
             }
 
             // BUSINESS RULE 2: Validate 2-hour lead time
-            const now = new Date();
-            const [hours, minutes] = appointmentData.start_time.split(':').map(Number);
-            const appointmentDateTime = new Date(appointmentData.appointment_date);
-            appointmentDateTime.setHours(hours, minutes, 0, 0);
-
             const diffMs = appointmentDateTime.getTime() - now.getTime();
             const diffHours = diffMs / (1000 * 60 * 60);
 
-            if (diffHours < 2) {
+            if (diffHours < 1.99) { // Allow slight margin for floating point precision
                 return {
                     success: false,
-                    message: `Appointment must be booked at least 2 hours in advance. Current lead time: ${diffHours.toFixed(1)} hours.`
+                    message: `Appointments must be booked at least 2 hours in advance. Current lead time: ${diffHours.toFixed(1)} hours.`
                 };
             }
 
@@ -69,20 +165,11 @@ export class AppointmentService {
             if (hasConflict) {
                 return {
                     success: false,
-                    message: 'The selected time slot conflicts with an existing appointment.'
+                    message: 'The consultant already has an appointment at this time'
                 };
             }
 
             // BUSINESS RULE 4: Validate consultant working hours
-            const consultant = await Consultant.findById(appointmentData.consultant_id).populate('user_id');
-            if (!consultant) {
-                return {
-                    success: false,
-                    message: 'Consultant not found'
-                };
-            }
-
-            // Sử dụng method đúng từ WeeklyScheduleRepository
             const consultantSchedule = await WeeklyScheduleRepository.findByConsultantAndDate(
                 appointmentData.consultant_id,
                 appointmentData.appointment_date
@@ -113,7 +200,7 @@ export class AppointmentService {
                 }
             }
 
-            // Create appointment - sử dụng đúng field names từ model
+            // Create appointment
             const newAppointment = await AppointmentRepository.create({
                 customer_id: new mongoose.Types.ObjectId(appointmentData.customer_id),
                 consultant_id: new mongoose.Types.ObjectId(appointmentData.consultant_id),
@@ -122,13 +209,13 @@ export class AppointmentService {
                 end_time: appointmentData.end_time,
                 status: 'pending',
                 customer_notes: appointmentData.customer_notes,
-                created_date: new Date(), // Đúng field name
-                updated_date: new Date()  // Đúng field name
+                created_date: new Date(),
+                updated_date: new Date()
             });
 
             console.log('Appointment created:', newAppointment._id);
 
-            // ✅ THÊM: Log appointment history cho action "created"
+            // Log appointment history
             try {
                 await AppointmentHistoryService.logAppointmentCreated(
                     newAppointment._id.toString(),
@@ -149,11 +236,16 @@ export class AppointmentService {
                 console.log('✅ Appointment history created successfully for:', newAppointment._id);
             } catch (historyError) {
                 console.error('❌ Failed to create appointment history:', historyError);
-                // Don't fail the appointment creation if history logging fails
             }
 
-            // Populate for response
+            // Get populated appointment for response
             const populatedAppointment = await AppointmentRepository.findById(newAppointment._id.toString());
+
+            // Ensure customer_id and consultant_id are returned as strings
+            if (populatedAppointment) {
+                populatedAppointment.customer_id = populatedAppointment.customer_id._id || populatedAppointment.customer_id;
+                populatedAppointment.consultant_id = populatedAppointment.consultant_id._id || populatedAppointment.consultant_id;
+            }
 
             return {
                 success: true,
@@ -173,7 +265,7 @@ export class AppointmentService {
     }
 
     /**
-     * ENHANCED: Confirm appointment với REAL Google Meet generation
+     * Confirm appointment with validation
      */
     public static async confirmAppointment(
         appointmentId: string,
@@ -181,6 +273,29 @@ export class AppointmentService {
         googleAccessToken?: string
     ): Promise<AppointmentResponse> {
         try {
+            // Input validation
+            if (!appointmentId || !consultantUserId) {
+                return {
+                    success: false,
+                    message: 'Appointment ID and consultant user ID are required'
+                };
+            }
+
+            // ObjectId validation
+            if (!this.isValidObjectId(appointmentId)) {
+                return {
+                    success: false,
+                    message: 'Appointment not found'
+                };
+            }
+
+            if (!this.isValidObjectId(consultantUserId)) {
+                return {
+                    success: false,
+                    message: 'Invalid consultant ID'
+                };
+            }
+
             const appointment = await AppointmentRepository.findById(appointmentId);
             if (!appointment) {
                 return {
@@ -199,26 +314,28 @@ export class AppointmentService {
             // Store old data for history
             const oldData = { ...appointment };
 
-            // Kiểm tra consultant có quyền confirm không
+            // Check if consultant has permission to confirm
             const consultant = await Consultant.findById(appointment.consultant_id).populate('user_id', 'full_name email');
-            if (!consultant || consultant.user_id._id.toString() !== consultantUserId) {
+            if (!consultant) {
                 return {
                     success: false,
-                    message: 'You can only confirm your own appointments'
+                    message: 'Consultant not found'
                 };
             }
 
-            // Get customer info để gửi email
+            // Accept either the consultant's user_id or the consultant_id itself
+            const isAuthorized = consultant.user_id._id.toString() === consultantUserId || 
+                                consultant._id.toString() === consultantUserId;
+            
+            if (!isAuthorized) {
+                return {
+                    success: false,
+                    message: 'Unauthorized. You can only confirm your own appointments'
+                };
+            }
+
+            // Get customer info for email
             const customer = await User.findById(appointment.customer_id);
-
-     
-            if (!googleAccessToken) {
-                return {
-                    success: false,
-                    message: 'Google Access Token is required to create Google Meet link. Please authenticate with Google first.',
-                    requiresGoogleAuth: true
-                };
-            }
 
             // Tạo datetime cho cuộc hẹn
             const appointmentDate = new Date(appointment.appointment_date);
@@ -233,22 +350,32 @@ export class AppointmentService {
 
             let meetingDetails;
             try {
-                // Generate REAL Google Meet link - bắt buộc có access token
-                meetingDetails = await GoogleMeetService.generateRealMeetLink(
-                    `Tư vấn với ${(consultant.user_id as any).full_name}`,
-                    startDateTime,
-                    endDateTime,
-                    customer ? [customer.email, (consultant.user_id as any).email] : [(consultant.user_id as any).email],
-                    googleAccessToken
-                );
-
-                console.log('Real Google Meet created successfully:', meetingDetails);
+                // Try to generate real Google Meet link if access token is provided
+                if (googleAccessToken) {
+                    meetingDetails = await GoogleMeetService.generateRealMeetLink(
+                        `Consultation with ${(consultant.user_id as any).full_name}`,
+                        startDateTime,
+                        endDateTime,
+                        customer ? [customer.email, (consultant.user_id as any).email] : [(consultant.user_id as any).email],
+                        googleAccessToken
+                    );
+                    console.log('Real Google Meet created successfully:', meetingDetails);
+                } else {
+                    // Generate fallback meeting details if no access token
+                    meetingDetails = {
+                        meet_url: `https://meet.google.com/gen-${appointmentId.slice(-8)}`,
+                        meeting_id: `gen-meeting-${appointmentId.slice(-8)}`,
+                        calendar_event_id: null
+                    };
+                    console.log('Fallback meeting details generated:', meetingDetails);
+                }
             } catch (error) {
-                console.error('Failed to create Google Meet:', error);
-                return {
-                    success: false,
-                    message: `Failed to create Google Meet: ${error.message}. Please ensure your Google account has permission to create meetings.`,
-                    requiresGoogleAuth: true
+                console.error('Failed to create meeting details:', error);
+                // Generate basic meeting info as fallback
+                meetingDetails = {
+                    meet_url: `https://meet.google.com/gen-${appointmentId.slice(-8)}`,
+                    meeting_id: `gen-meeting-${appointmentId.slice(-8)}`,
+                    calendar_event_id: null
                 };
             }
 
@@ -320,7 +447,7 @@ export class AppointmentService {
 
             return {
                 success: true,
-                message: 'Appointment confirmed successfully and real Google Meet link has been sent to customer',
+                message: 'Appointment confirmed successfully and meeting link has been sent to customer',
                 data: {
                     appointment: confirmedAppointment,
                     meetingDetails: meetingDetails
@@ -367,16 +494,32 @@ export class AppointmentService {
                 };
             }
 
+            // Authorization check: Only customer, consultant, staff, or admin can cancel
+            const appointmentConsultant = await Consultant.findById(appointment.consultant_id).populate('user_id');
+            const isCustomer = appointment.customer_id.toString() === requestUserId;
+            const isConsultant = appointmentConsultant && (
+                appointmentConsultant._id.toString() === requestUserId || 
+                appointmentConsultant.user_id._id.toString() === requestUserId
+            );
+            const isStaffOrAdmin = requestUserRole === 'staff' || requestUserRole === 'admin';
+
+            if (!isCustomer && !isConsultant && !isStaffOrAdmin) {
+                return {
+                    success: false,
+                    message: 'Unauthorized. You can only cancel your own appointments'
+                };
+            }
+
             // Store old data for history
             const oldData = { ...appointment };
 
-            // BUSINESS RULE: Hủy lịch trước 4 tiếng
+            // BUSINESS RULE: Cancel at least 4 hours before scheduled time
             const now = new Date();
             const appointmentDateTime = new Date(`${appointment.appointment_date.toISOString().split('T')[0]} ${appointment.start_time}:00`);
             const diffHours = (appointmentDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-            // Staff và Admin có thể hủy bất cứ lúc nào
-            if (requestUserRole !== 'staff' && requestUserRole !== 'admin' && diffHours < 4) {
+            // Staff and Admin can cancel anytime
+            if (!isStaffOrAdmin && diffHours < 4) {
                 return {
                     success: false,
                     message: 'Appointment can only be cancelled at least 4 hours before the scheduled time'

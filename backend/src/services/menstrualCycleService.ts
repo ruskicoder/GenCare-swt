@@ -5,6 +5,13 @@ import {MenstrualCycleRepository} from '../repositories/menstrualCycleRepository
 import { CycleStatsResponse, PeriodStatsResponse, RegularityStatus, TrendStatus } from '../dto/responses/menstrualCycleResponse';
 
 export class MenstrualCycleService {
+    /**
+     * Validate ObjectId format
+     */
+    private static isValidObjectId(id: string): boolean {
+        return mongoose.Types.ObjectId.isValid(id);
+    }
+
     public static async processPeriodDays(user_id: string, period_days: Date[], notes: string){
         if (!period_days || period_days.length === 0) return [];
         if (!user_id){
@@ -191,11 +198,28 @@ export class MenstrualCycleService {
 
     public static async getCycles(user_id: string) {
         try {
+            // Input validation
+            if (!user_id) {
+                return {
+                    success: false,
+                    message: 'User ID is required'
+                };
+            }
+
+            // ObjectId validation
+            if (!this.isValidObjectId(user_id)) {
+                return {
+                    success: false,
+                    message: 'Invalid user ID format'
+                };
+            }
+
             const cycles = await MenstrualCycleRepository.getCyclesByUser(user_id);
             if (!cycles || cycles.length === 0) {
                 return {
-                    success: false,
-                    message: 'No cycles found for this user'
+                    success: true,
+                    message: 'No cycles found for this user',
+                    data: []
                 };
             }
             return {
