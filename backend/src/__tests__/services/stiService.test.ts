@@ -750,23 +750,33 @@ describe('StiService', () => {
   describe('STI Test Management', () => {
     describe('createStiTest', () => {
       it('should successfully create new STI test', async () => {
-                 const testData = {
-           sti_test_code: 'TEST001',
-           sti_test_name: 'HIV Test'
-         } as any;
+        const creatorUser = await TestDataFactory.createTestUser({
+          email: `creator-${Date.now()}@example.com`
+        });
+        
+        const testData = new StiTest({
+          sti_test_code: 'STI-VIR-BLD-HIV001',
+          sti_test_name: 'HIV Test',
+          description: 'HIV blood test',
+          price: 100,
+          is_active: true,
+          category: 'viral',
+          sti_test_type: 'máu',
+          createdBy: creatorUser._id
+        });
 
-       const result = await StiService.createStiTest(testData);
-       
-       expect(result.success).toBe(true);
-       expect(result.message).toBe('Insert StiTest to database successfully');
-       expect(result.stitest).toBeDefined();
-     });
+        const result = await StiService.createStiTest(testData);
+        
+        expect(result.success).toBe(true);
+        expect(result.message).toBe('Insert StiTest to database successfully');
+        expect(result.stitest).toBeDefined();
+      });
 
      it('should retrieve all STI tests successfully', async () => {
        const result = await StiService.getAllStiTest();
        
        expect(result.success).toBe(true);
-       expect(result.message).toBe('Get all StiTests successfully');
+       expect(result.message).toBe('Get STI tests successfully');
        expect(Array.isArray(result.stitest)).toBe(true);
      });
 
@@ -801,4 +811,5 @@ describe('StiService', () => {
        
        expect(result).toBeDefined();
      });
+  });
 });
