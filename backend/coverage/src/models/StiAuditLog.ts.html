@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>7/7</span>
+                <span class='fraction'>0/7</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>7/7</span>
+                <span class='fraction'>0/7</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -100,10 +100,10 @@
 <a name='L35'></a><a href='#L35'>35</a>
 <a name='L36'></a><a href='#L36'>36</a>
 <a name='L37'></a><a href='#L37'>37</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -118,7 +118,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -129,17 +129,17 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// models/AuditLog.ts
-import mongoose, { Schema, Document } from 'mongoose';
-import { StiOrder } from '../models/StiOrder';
-import { StiPackage } from '../models/StiPackage';
-import { StiTest } from '../models/StiTest';
+<span class="cstat-no" title="statement not covered" >import mongoose, { Schema, Document } from 'mongoose';</span>
+<span class="cstat-no" title="statement not covered" >import { StiOrder } from '../models/StiOrder';</span>
+<span class="cstat-no" title="statement not covered" >import { StiPackage } from '../models/StiPackage';</span>
+<span class="cstat-no" title="statement not covered" >import { StiTest } from '../models/StiTest';</span>
 &nbsp;
 export type TargetType = 'StiOrder' | 'StiPackage' | 'StiTest';
 &nbsp;
@@ -154,7 +154,7 @@ export interface IStiAuditLog extends Document {
     notes?: string;
 }
 &nbsp;
-const stiAuditLogSchema = new Schema&lt;IStiAuditLog&gt;({
+const stiAuditLogSchema = <span class="cstat-no" title="statement not covered" >new Schema&lt;IStiAuditLog&gt;({</span>
     target_type: {type: String, enum: ['StiOrder', 'StiPackage', 'StiTest'], required: true},
     target_id: {type: Schema.Types.ObjectId, required: true},
     user_id: { type: Schema.Types.ObjectId, required: true},
@@ -165,9 +165,9 @@ const stiAuditLogSchema = new Schema&lt;IStiAuditLog&gt;({
     notes: { type: String },
 });
 &nbsp;
-export const StiAuditLog = mongoose.model&lt;IStiAuditLog&gt;('AuditLog', stiAuditLogSchema);
+export const <span class="cstat-no" title="statement not covered" >StiAuditLog = mongoose.model&lt;IStiAuditLog&gt;('AuditLog', stiAuditLogSchema);</span>
 &nbsp;
-export const modelMap: Record&lt;TargetType, mongoose.Model&lt;any&gt;&gt; = {
+export const <span class="cstat-no" title="statement not covered" >modelMap: Record&lt;TargetType, mongoose.Model&lt;any&gt;&gt; = {</span>
   StiOrder: StiOrder,
   StiPackage: StiPackage,
   StiTest: StiTest
@@ -178,7 +178,7 @@ export const modelMap: Record&lt;TargetType, mongoose.Model&lt;any&gt;&gt; = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-07-13T15:05:01.032Z
+                at 2025-07-13T15:47:02.182Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

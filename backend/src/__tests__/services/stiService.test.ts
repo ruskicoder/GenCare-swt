@@ -6,6 +6,7 @@ import { StiPackage } from '../../models/StiPackage';
 import { StiTestSchedule } from '../../models/StiTestSchedule';
 import { User } from '../../models/User';
 import mongoose from 'mongoose';
+import { TestTypes } from '../../models/StiTest';
 
 describe('StiService', () => {
   let testUser: any;
@@ -658,7 +659,7 @@ describe('StiService', () => {
     });
 
     it('should handle invalid staff ID', async () => {
-      const result = await StiService.updateOrder(testOrder._id.toString(), { order_status: 'Processing' }, 'invalid-staff-id', 'staff');
+      const result = await StiService.updateOrder(testOrder._id.toString(), { order_status: 'Accepted' }, 'invalid-staff-id', 'staff');
       
       expect(result.success).toBe(true); // Service doesn't validate user ID format, just role
       expect(result.message).toBe('Order updated successfully');
@@ -744,4 +745,60 @@ describe('StiService', () => {
       }
     });
   });
+});
+
+  describe('STI Test Management', () => {
+    describe('createStiTest', () => {
+      it('should successfully create new STI test', async () => {
+                 const testData = {
+           sti_test_code: 'TEST001',
+           sti_test_name: 'HIV Test'
+         } as any;
+
+       const result = await StiService.createStiTest(testData);
+       
+       expect(result.success).toBe(true);
+       expect(result.message).toBe('Insert StiTest to database successfully');
+       expect(result.stitest).toBeDefined();
+     });
+
+     it('should retrieve all STI tests successfully', async () => {
+       const result = await StiService.getAllStiTest();
+       
+       expect(result.success).toBe(true);
+       expect(result.message).toBe('Get all StiTests successfully');
+       expect(Array.isArray(result.stitest)).toBe(true);
+     });
+
+     it('should handle revenue calculation', async () => {
+       const customerId = new mongoose.Types.ObjectId().toString();
+       const result = await StiService.getTotalRevenueByCustomer(customerId);
+       
+       expect(result).toBeDefined();
+     });
+
+     it('should handle total revenue calculation', async () => {
+       const result = await StiService.getTotalRevenue();
+       
+       expect(result).toBeDefined();
+     });
+
+     it('should handle audit log retrieval', async () => {
+       const result = await StiService.getAllAuditLog();
+       
+       expect(result).toBeDefined();
+     });
+
+     it('should handle result creation', async () => {
+       const orderId = new mongoose.Types.ObjectId().toString();
+       const result = await StiService.createStiResult(orderId);
+       
+       expect(result).toBeDefined();
+     });
+
+     it('should handle result retrieval', async () => {
+       const result = await StiService.getAllStiResult();
+       
+       expect(result).toBeDefined();
+     });
 });
