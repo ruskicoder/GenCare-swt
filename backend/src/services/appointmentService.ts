@@ -105,6 +105,10 @@ export class AppointmentService {
             appointmentDateTime.setHours(startHours, startMinutes, 0, 0);
             const now = new Date();
 
+            // Calculate time difference for proper validation
+            const diffMs = appointmentDateTime.getTime() - now.getTime();
+            const diffHours = diffMs / (1000 * 60 * 60);
+
             if (appointmentDateTime <= now) {
                 return {
                     success: false,
@@ -143,10 +147,7 @@ export class AppointmentService {
                 };
             }
 
-            // BUSINESS RULE 2: Validate 2-hour lead time
-            const diffMs = appointmentDateTime.getTime() - now.getTime();
-            const diffHours = diffMs / (1000 * 60 * 60);
-
+            // BUSINESS RULE 2: Validate 2-hour lead time (using previously calculated values)
             if (diffHours < 1.99) { // Allow slight margin for floating point precision
                 return {
                     success: false,

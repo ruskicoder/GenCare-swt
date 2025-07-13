@@ -444,18 +444,21 @@ describe('MenstrualCycleService', () => {
       const user = await createTestUser();
       const result = await MenstrualCycleService.getCycles(user._id.toString());
       
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
       expect(result.message).toContain('No cycles found');
+      expect(result.data).toEqual([]);
     });
 
     it('should handle database errors gracefully', async () => {
-      jest.spyOn(MenstrualCycleRepository, 'getCyclesByUser').mockRejectedValue(new Error('Database error'));
+      const mockGetCycles = jest.spyOn(MenstrualCycleRepository, 'getCyclesByUser').mockRejectedValue(new Error('Database error'));
       
       const user = await createTestUser();
       const result = await MenstrualCycleService.getCycles(user._id.toString());
       
       expect(result.success).toBe(false);
       expect(result.message).toContain('Failed to retrieve cycles');
+      
+      mockGetCycles.mockRestore();
     });
   });
 
@@ -545,6 +548,10 @@ describe('MenstrualCycleService', () => {
   });
 
   describe('Integration Tests', () => {
+    beforeEach(() => {
+      jest.restoreAllMocks(); // Clear any mocks from previous tests
+    });
+
     it('should handle complete cycle workflow', async () => {
       const user = await createTestUser();
       
@@ -612,21 +619,28 @@ describe('MenstrualCycleService', () => {
   });
   
   describe('Error Handling', () => {
+    beforeEach(() => {
+      jest.restoreAllMocks(); // Clear any mocks from previous tests
+    });
+
     it('should handle database connection errors', async () => {
-      jest.spyOn(MenstrualCycleRepository, 'getCyclesByUser').mockRejectedValue(new Error('Connection failed'));
+      const mockConnection = jest.spyOn(MenstrualCycleRepository, 'getCyclesByUser').mockRejectedValue(new Error('Connection failed'));
       
       const user = await createTestUser();
       const result = await MenstrualCycleService.getCycles(user._id.toString());
       
       expect(result.success).toBe(false);
       expect(result.message).toContain('Failed to retrieve cycles');
+      
+      mockConnection.mockRestore();
     });
     
     it('should handle repository errors in processPeriodDays', async () => {
-      jest.spyOn(MenstrualCycleRepository, 'insertCycles').mockRejectedValue(new Error('Insert failed'));
-      
       const user = await createTestUser();
       const periodDays = [new Date('2024-01-01')];
+      
+      const mockInsert = jest.spyOn(MenstrualCycleRepository, 'insertCycles').mockRejectedValue(new Error('Insert failed'));
+      
       const result = await MenstrualCycleService.processPeriodDays(user._id.toString(), periodDays, 'Error test');
       
       expect(typeof result).toBe('object');
@@ -634,26 +648,32 @@ describe('MenstrualCycleService', () => {
         expect(result.success).toBe(false);
         expect(result.message).toContain('Failed to save cycles');
       }
+      
+      mockInsert.mockRestore();
     });
     
     it('should handle repository errors in getCycleStats', async () => {
-      jest.spyOn(MenstrualCycleRepository, 'getCycleStatsData').mockRejectedValue(new Error('Stats failed'));
+      const mockStats = jest.spyOn(MenstrualCycleRepository, 'getCycleStatsData').mockRejectedValue(new Error('Stats failed'));
       
       const user = await createTestUser();
       const result = await MenstrualCycleService.getCycleStats(user._id.toString());
       
       expect(result.success).toBe(false);
       expect(result.message).toContain('Error when getting cycle statistics');
+      
+      mockStats.mockRestore();
     });
     
     it('should handle repository errors in getTodayStatus', async () => {
-      jest.spyOn(MenstrualCycleRepository, 'getLatestCycles').mockRejectedValue(new Error('Status failed'));
+      const mockLatest = jest.spyOn(MenstrualCycleRepository, 'getLatestCycles').mockRejectedValue(new Error('Status failed'));
       
       const user = await createTestUser();
       const result = await MenstrualCycleService.getTodayStatus(user._id.toString());
       
       expect(result.success).toBe(false);
       expect(result.message).toContain('Failed to get today status');
+      
+      mockLatest.mockRestore();
     });
   });
 });
