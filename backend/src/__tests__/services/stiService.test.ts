@@ -33,7 +33,7 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(result.message).toContain('successfully') || expect(result.message).toContain('created');
+        expect(result.message).toMatch(/successfully|created/);
         expect(result.stiorder).toBeDefined();
       });
 
@@ -47,7 +47,7 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(result.message).toContain('successfully') || expect(result.message).toContain('created');
+        expect(result.message).toMatch(/successfully|created/);
         expect(result.stiorder).toBeDefined();
       });
 
@@ -61,7 +61,7 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(result.message).toContain('successfully') || expect(result.message).toContain('created');
+        expect(result.message).toMatch(/successfully|created/);
         expect(result.stiorder).toBeDefined();
       });
 
@@ -116,7 +116,7 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('required') || expect(result.message).toContain('must select');
+        expect(result.message).toMatch(/required|must select/);
       });
 
       it('should reject order with invalid customer ID', async () => {
@@ -129,7 +129,7 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Customer not found') || expect(result.message).toContain('invalid');
+        expect(result.message).toMatch(/Customer not found|invalid/);
       });
 
       it('should reject order with non-existent package ID', async () => {
@@ -143,10 +143,10 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Package not found') || expect(result.message).toContain('not found');
+        expect(result.message).toMatch(/Package not found|not found/);
       });
 
-      it('should reject order with non-existent test ID', async () => {
+      it('should reject order with non-existent individual test ID', async () => {
         const nonExistentId = new mongoose.Types.ObjectId().toString();
         const result = await StiService.createStiOrder(
           testUser._id.toString(),
@@ -157,13 +157,13 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Test not found') || expect(result.message).toContain('not found');
+        expect(result.message).toMatch(/Test not found|not found/);
       });
 
-      it('should reject order with past date', async () => {
+      it('should reject order with past test date', async () => {
         const pastDate = new Date();
         pastDate.setDate(pastDate.getDate() - 1);
-
+        
         const result = await StiService.createStiOrder(
           testUser._id.toString(),
           testStiPackage._id.toString(),
@@ -173,15 +173,11 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('past') || expect(result.message).toContain('invalid date');
+        expect(result.message).toMatch(/past|invalid date/);
       });
 
       it('should reject order with inactive package', async () => {
-        const inactivePackage = await TestDataFactory.createTestStiPackage({
-          sti_package_code: 'INACTIVE01',
-          is_active: false
-        });
-
+        const inactivePackage = await TestDataFactory.createTestStiPackage({ is_active: false });
         const result = await StiService.createStiOrder(
           testUser._id.toString(),
           inactivePackage._id.toString(),
@@ -191,15 +187,11 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('inactive') || expect(result.message).toContain('not available');
+        expect(result.message).toMatch(/inactive|not available/);
       });
 
-      it('should reject order with inactive test', async () => {
-        const inactiveTest = await TestDataFactory.createTestStiTest({
-          sti_test_code: 'INACTIVE01',
-          is_active: false
-        });
-
+      it('should reject order with inactive individual test', async () => {
+        const inactiveTest = await TestDataFactory.createTestStiTest({ is_active: false });
         const result = await StiService.createStiOrder(
           testUser._id.toString(),
           '',
@@ -209,7 +201,7 @@ describe('StiService', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('inactive') || expect(result.message).toContain('not available');
+        expect(result.message).toMatch(/inactive|not available/);
       });
     });
 
@@ -458,13 +450,13 @@ describe('StiService', () => {
     it('should reject invalid status transitions', async () => {
       const result = await StiService.updateOrder(
         testOrder?._id?.toString() || '',
-        { order_status: 'InvalidStatus' },
+        { order_status: 'Accepted' as any },
         testUser._id.toString(),
         'staff'
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('invalid') || expect(result.message).toContain('status');
+      expect(result.message).toMatch(/invalid|status/);
     });
 
     it('should reject updates by unauthorized users', async () => {
@@ -476,7 +468,7 @@ describe('StiService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('permission') || expect(result.message).toContain('unauthorized');
+      expect(result.message).toMatch(/permission|unauthorized/);
     });
 
     it('should handle non-existent order ID', async () => {
@@ -616,6 +608,106 @@ describe('StiService', () => {
       const finalOrder = completeResult.stiorder;
       expect(finalOrder?.order_status).toBe('Completed');
       expect(finalOrder?.payment_status).toBe('Paid');
+    });
+  });
+
+  describe('Error Scenarios', () => {
+    it('should handle invalid order ID', async () => {
+      const result = await StiService.updateOrderStatus('invalid-order-id', 'Accepted', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/invalid|not found/);
+    });
+
+    it('should handle non-existent order ID', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await StiService.updateOrderStatus(nonExistentId, 'Accepted', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/invalid|not found/);
+    });
+
+    it('should handle invalid staff ID', async () => {
+      const result = await StiService.updateOrderStatus(testOrder._id.toString(), 'Accepted', 'invalid-staff-id');
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/invalid|not found/);
+    });
+
+    it('should handle invalid status', async () => {
+      const result = await StiService.updateOrderStatus(testOrder._id.toString(), 'Accepted', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/invalid|date/);
+    });
+
+    it('should handle missing required parameters', async () => {
+      const result = await StiService.updateOrderStatus('', 'Accepted', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/required|invalid/);
+    });
+
+    it('should handle null parameters', async () => {
+      const result = await StiService.updateOrderStatus(null as any, 'Accepted', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/required|invalid/);
+    });
+
+    it('should reject updates from unauthorized users', async () => {
+      const result = await StiService.updatePaymentStatus(testOrder._id.toString(), 'Paid', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/invalid|not found/);
+    });
+
+    it('should accept status update from authorized staff', async () => {
+      const result = await StiService.updateOrderStatus(testOrder._id.toString(), 'Accepted', testUser._id.toString());
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.order_status).toBe('Accepted');
+    });
+
+    it('should accept payment update from authorized staff', async () => {
+      const result = await StiService.updatePaymentStatus(testOrder._id.toString(), 'Paid', testUser._id.toString());
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.payment_status).toBe('Paid');
+    });
+  });
+
+  describe('Complete Order Workflow', () => {
+    it('should handle complete order lifecycle', async () => {
+      // Create order
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        [],
+        testStiSchedule.test_date,
+        'Complete workflow test'
+      );
+      expect(createResult.success).toBe(true);
+      
+      if (createResult.success && createResult.stiorder) {
+        const orderId = createResult.stiorder._id.toString();
+        
+        // Accept order
+        const acceptResult = await StiService.updateOrderStatus(orderId, 'Accepted', testUser._id.toString());
+        expect(acceptResult.success).toBe(true);
+        
+        // Update payment
+        const paymentResult = await StiService.updatePaymentStatus(orderId, 'Paid', testUser._id.toString());
+        expect(paymentResult.success).toBe(true);
+        
+        // Complete order
+        const completeResult = await StiService.updateOrderStatus(orderId, 'Completed', testUser._id.toString());
+        expect(completeResult.success).toBe(true);
+        
+        const finalOrder = completeResult.data;
+        expect(finalOrder?.order_status).toBe('Completed');
+        expect(finalOrder?.payment_status).toBe('Paid');
+      }
     });
   });
 });

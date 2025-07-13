@@ -193,7 +193,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('time format') || expect(result.message).toContain('invalid');
+        expect(result.message).toMatch(/time format|invalid/);
       });
 
       it('should reject when end time is before start time', async () => {
@@ -206,7 +206,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('before') || expect(result.message).toContain('invalid');
+        expect(result.message).toMatch(/before|invalid/);
       });
 
       it('should reject when start time equals end time', async () => {
@@ -219,7 +219,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('before') || expect(result.message).toContain('invalid');
+        expect(result.message).toMatch(/before|invalid/);
       });
 
       it('should reject missing required fields', async () => {
@@ -232,7 +232,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('required') || expect(result.message).toContain('missing');
+        expect(result.message).toMatch(/required|missing/);
       });
 
       it('should reject non-existent customer ID', async () => {
@@ -345,21 +345,21 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('invalid') || expect(result.message).toContain('not found');
+        expect(result.message).toMatch(/invalid|not found/);
       });
 
       it('should handle null/undefined parameters', async () => {
         const result = await AppointmentService.bookAppointment(null as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('required') || expect(result.message).toContain('invalid');
+        expect(result.message).toMatch(/required|invalid/);
       });
 
       it('should handle empty object parameters', async () => {
         const result = await AppointmentService.bookAppointment({} as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('required') || expect(result.message).toContain('missing');
+        expect(result.message).toMatch(/required|missing/);
       });
     });
   });
@@ -394,7 +394,7 @@ describe('AppointmentService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('permission') || expect(result.message).toContain('unauthorized');
+      expect(result.message).toMatch(/permission|unauthorized/);
     });
 
     it('should reject confirmation of non-existent appointment', async () => {
@@ -459,7 +459,7 @@ describe('AppointmentService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('permission') || expect(result.message).toContain('unauthorized');
+      expect(result.message).toMatch(/permission|unauthorized/);
     });
   });
 

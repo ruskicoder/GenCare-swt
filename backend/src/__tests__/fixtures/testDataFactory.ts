@@ -54,40 +54,62 @@ export class TestDataFactory {
 
   // Create test weekly schedule
   static async createTestWeeklySchedule(consultantId: string, overrides: Partial<IWeeklySchedule> = {}): Promise<IWeeklySchedule> {
+    // Create an admin user for the created_by field
+    const adminUser = await this.createTestUser({
+      full_name: 'Admin User',
+      email: 'admin@example.com',
+      role: 'admin'
+    });
+
     const scheduleData = {
       consultant_id: new mongoose.Types.ObjectId(consultantId),
       week_start_date: new Date('2024-01-01'),
       week_end_date: new Date('2024-01-07'),
-      schedule: [
-        {
-          day_of_week: 1,
-          working_hours: {
-            start: '09:00',
-            end: '17:00'
-          },
-          break_times: [
-            {
-              start: '12:00',
-              end: '13:00'
-            }
-          ],
+      working_days: {
+        monday: {
+          start_time: '09:00',
+          end_time: '17:00',
+          break_start: '12:00',
+          break_end: '13:00',
           is_available: true
         },
-        {
-          day_of_week: 2,
-          working_hours: {
-            start: '09:00',
-            end: '17:00'
-          },
-          break_times: [
-            {
-              start: '12:00',
-              end: '13:00'
-            }
-          ],
+        tuesday: {
+          start_time: '09:00',
+          end_time: '17:00',
+          break_start: '12:00',
+          break_end: '13:00',
+          is_available: true
+        },
+        wednesday: {
+          start_time: '09:00',
+          end_time: '17:00',
+          break_start: '12:00',
+          break_end: '13:00',
+          is_available: true
+        },
+        thursday: {
+          start_time: '09:00',
+          end_time: '17:00',
+          break_start: '12:00',
+          break_end: '13:00',
+          is_available: true
+        },
+        friday: {
+          start_time: '09:00',
+          end_time: '17:00',
+          break_start: '12:00',
+          break_end: '13:00',
           is_available: true
         }
-      ],
+      },
+      default_slot_duration: 60,
+      created_by: {
+        user_id: adminUser._id,
+        role: adminUser.role,
+        name: adminUser.full_name
+      },
+      created_date: new Date(),
+      updated_date: new Date(),
       ...overrides
     };
 

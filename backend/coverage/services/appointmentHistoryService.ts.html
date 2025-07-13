@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">4.76% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/105</span>
+                <span class='fraction'>5/105</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">6.25% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>1/16</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">5.15% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/97</span>
+                <span class='fraction'>5/97</span>
             </div>
         
             
@@ -579,13 +579,13 @@
 <a name='L514'></a><a href='#L514'>514</a>
 <a name='L515'></a><a href='#L515'>515</a>
 <a name='L516'></a><a href='#L516'>516</a>
-<a name='L517'></a><a href='#L517'>517</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<a name='L517'></a><a href='#L517'>517</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -849,8 +849,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1095,13 +1095,13 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import { AppointmentHistoryRepository } from '../repositories/appointmentHistoryRepository';</span>
-<span class="cstat-no" title="statement not covered" >import { PaginationUtils } from '../utils/paginationUtils';</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { AppointmentHistoryRepository } from '../repositories/appointmentHistoryRepository';
+import { PaginationUtils } from '../utils/paginationUtils';
 import { IAppointmentHistory } from '../models/AppointmentHistory';
 import { AppointmentHistoryQuery } from '../dto/requests/AppointmentHistoryRequest';
 import { AppointmentHistoryResponse } from '../dto/responses/AppointmentHistoryResponse';
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export class A</span>ppointmentHistoryService {
+export class AppointmentHistoryService {
     /**
      * Tạo history record mới
      */
@@ -1359,14 +1359,14 @@ import { AppointmentHistoryResponse } from '../dto/responses/AppointmentHistoryR
     /**
      * Helper: Tạo history cho việc tạo appointment mới
      */
-    public <span class="fstat-no" title="function not covered" >static </span>async logAppointmentCreated(
+    public static async logAppointmentCreated(
         appointmentId: string,
         appointmentData: any,
         userId: string,
         userRole: string
     ): Promise&lt;void&gt; {
-<span class="cstat-no" title="statement not covered" >        try {</span>
-<span class="cstat-no" title="statement not covered" >            await AppointmentHistoryRepository.create({</span>
+        try {
+            await AppointmentHistoryRepository.create({
                 appointment_id: appointmentId,
                 action: 'created',
                 performed_by_user_id: userId,
@@ -1618,7 +1618,7 @@ import { AppointmentHistoryResponse } from '../dto/responses/AppointmentHistoryR
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-07-13T05:49:07.498Z
+                at 2025-07-13T10:50:29.786Z
             </div>
         <script src="../prettify.js"></script>
         <script>
