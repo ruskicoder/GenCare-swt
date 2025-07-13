@@ -598,4 +598,291 @@ describe('AppointmentService', () => {
       expect(completeResult.data?.appointment.status).toBe('completed');
     });
   });
+
+  describe('sendMeetingReminder', () => {
+    it('should handle non-existent appointment', async () => {
+      const result = await AppointmentService.sendMeetingReminder('507f1f77bcf86cd799439011');
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should handle invalid appointment ID', async () => {
+      const result = await AppointmentService.sendMeetingReminder('invalid-id');
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('error');
+    });
+  });
+
+  describe('startMeeting', () => {
+    it('should handle non-existent appointment', async () => {
+      const result = await AppointmentService.startMeeting('507f1f77bcf86cd799439011', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should handle invalid appointment ID', async () => {
+      const result = await AppointmentService.startMeeting('invalid-id', testUser._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('error');
+    });
+  });
+
+  describe('getAppointmentFeedback', () => {
+    it('should handle non-existent appointment', async () => {
+      const result = await AppointmentService.getAppointmentFeedback(
+        '507f1f77bcf86cd799439011',
+        testUser._id.toString(),
+        'customer'
+      );
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should handle invalid appointment ID', async () => {
+      const result = await AppointmentService.getAppointmentFeedback(
+        'invalid-id',
+        testUser._id.toString(),
+        'customer'
+      );
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('error');
+    });
+  });
+
+  describe('getConsultantFeedbackStats', () => {
+    it('should handle unauthorized access', async () => {
+      const result = await AppointmentService.getConsultantFeedbackStats(
+        testConsultant._id.toString(),
+        testUser._id.toString(),
+        'customer'
+      );
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('permission');
+    });
+
+    it('should handle invalid consultant ID', async () => {
+      const result = await AppointmentService.getConsultantFeedbackStats(
+        'invalid-id',
+        testConsultant._id.toString(),
+        'consultant'
+      );
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('error');
+    });
+  });
+
+  describe('getAllFeedback', () => {
+    it('should successfully get all feedback with pagination', async () => {
+      const result = await AppointmentService.getAllFeedback(1, 10);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.feedbacks).toBeDefined();
+      expect(result.data?.pagination).toBeDefined();
+    });
+
+    it('should handle invalid pagination parameters', async () => {
+      const result = await AppointmentService.getAllFeedback(-1, 0);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.pagination).toBeDefined();
+    });
+
+    it('should filter by consultant ID', async () => {
+      const result = await AppointmentService.getAllFeedback(1, 10, testConsultant._id.toString());
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.feedbacks).toBeDefined();
+    });
+
+    it('should filter by rating range', async () => {
+      const result = await AppointmentService.getAllFeedback(1, 10, undefined, 4, 5);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.feedbacks).toBeDefined();
+    });
+  });
+
+  describe('getAppointmentsWithPagination', () => {
+    it('should successfully get appointments with pagination', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        sort_by: 'appointment_date' as 'appointment_date',
+        sort_order: 'desc' as 'asc' | 'desc'
+      };
+      
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointments).toBeDefined();
+      expect(result.data?.pagination).toBeDefined();
+    });
+
+    it('should handle search filtering', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        search: 'consultation',
+        sort_by: 'appointment_date' as 'appointment_date',
+        sort_order: 'desc' as 'asc' | 'desc'
+      };
+      
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointments).toBeDefined();
+    });
+
+    it('should handle status filtering', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        status: 'pending' as 'pending' | 'confirmed' | 'cancelled' | 'completed',
+        sort_by: 'appointment_date' as 'appointment_date',
+        sort_order: 'desc' as 'asc' | 'desc'
+      };
+      
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointments).toBeDefined();
+    });
+
+    it('should handle date range filtering', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        appointment_date_from: '2025-01-01',
+        appointment_date_to: '2025-12-31',
+        sort_by: 'appointment_date' as 'appointment_date',
+        sort_order: 'desc' as 'asc' | 'desc'
+      };
+      
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointments).toBeDefined();
+    });
+
+    it('should handle customer ID filtering', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        customer_id: testUser._id.toString(),
+        sort_by: 'appointment_date' as 'appointment_date',
+        sort_order: 'desc' as 'asc' | 'desc'
+      };
+      
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointments).toBeDefined();
+    });
+
+    it('should handle consultant ID filtering', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        consultant_id: testConsultant._id.toString(),
+        sort_by: 'appointment_date' as 'appointment_date',
+        sort_order: 'desc' as 'asc' | 'desc'
+      };
+      
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointments).toBeDefined();
+    });
+  });
+
+  describe('getAppointmentStatistics', () => {
+    it('should successfully get appointment statistics', async () => {
+      const result = await AppointmentService.getAppointmentStatistics();
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.statistics).toBeDefined();
+    });
+
+    it('should handle statistics with filters', async () => {
+      const filters = {
+        consultant_id: testConsultant._id.toString(),
+        status: 'completed'
+      };
+      
+      const result = await AppointmentService.getAppointmentStatistics(filters);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.statistics).toBeDefined();
+    });
+  });
+
+  describe('getAllAppointments', () => {
+    it('should handle invalid parameters', async () => {
+      const result = await AppointmentService.getAllAppointments('invalid-status');
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('error');
+    });
+  });
+
+  describe('Edge Cases and Error Scenarios', () => {
+    it('should handle database connection errors gracefully', async () => {
+      const result = await AppointmentService.confirmAppointment('507f1f77bcf86cd799439011', testConsultant._id.toString());
+      
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should handle invalid date formats', async () => {
+      const invalidData = {
+        customer_id: testUser._id.toString(),
+        consultant_id: testConsultant._id.toString(),
+        appointment_date: 'invalid-date',
+        start_time: '10:00',
+        end_time: '11:00'
+      };
+      
+      const result = await AppointmentService.bookAppointment(invalidData as any);
+      
+      expect(result.success).toBe(false);
+    });
+
+    it('should handle extremely long customer notes', async () => {
+      const longNotes = 'a'.repeat(10000);
+      
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString(),
+        { customer_notes: longNotes }
+      );
+      
+      const result = await AppointmentService.bookAppointment(appointmentData);
+      
+      expect(result.success).toBe(true);
+      expect(result.data?.appointment.customer_notes).toBe(longNotes);
+    });
+
+    it('should handle duplicate appointment attempts', async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      
+      // First booking should succeed
+      const firstResult = await AppointmentService.bookAppointment(appointmentData);
+      expect(firstResult.success).toBe(true);
+      
+      // Second booking for same time should fail
+      const secondResult = await AppointmentService.bookAppointment(appointmentData);
+      expect(secondResult.success).toBe(false);
+    });
+  });
 });

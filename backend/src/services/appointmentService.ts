@@ -433,17 +433,20 @@ export class AppointmentService {
                 };
 
                 // Send confirmation email với real Google Meet link (non-blocking)
-                EmailNotificationService.sendAppointmentConfirmation(emailData)
-                    .then(result => {
-                        if (result.success) {
-                            console.log('Confirmation email with real Google Meet sent successfully');
-                        } else {
-                            console.error('Failed to send confirmation email:', result.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error sending confirmation email:', error);
-                    });
+                const emailPromise = EmailNotificationService.sendAppointmentConfirmation(emailData);
+                if (emailPromise && typeof emailPromise.then === 'function') {
+                    emailPromise
+                        .then(result => {
+                            if (result.success) {
+                                console.log('Confirmation email with real Google Meet sent successfully');
+                            } else {
+                                console.error('Failed to send confirmation email:', result.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error sending confirmation email:', error);
+                        });
+                }
             }
 
             return {
@@ -572,8 +575,10 @@ export class AppointmentService {
                     appointmentId: appointmentId
                 };
 
-                EmailNotificationService.sendAppointmentCancellation(emailData, requestUserRole || 'system')
-                    .catch(error => console.error('Error sending cancellation email:', error));
+                const emailPromise = EmailNotificationService.sendAppointmentCancellation(emailData, requestUserRole || 'system');
+                if (emailPromise && typeof emailPromise.catch === 'function') {
+                    emailPromise.catch(error => console.error('Error sending cancellation email:', error));
+                }
             }
 
             return {
