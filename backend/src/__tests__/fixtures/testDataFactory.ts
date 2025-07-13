@@ -15,14 +15,12 @@ export class TestDataFactory {
     const userData = {
       email: 'test@example.com',
       password: 'hashedpassword123',
-      first_name: 'Test',
-      last_name: 'User',
+      full_name: 'Test User',
       phone: '1234567890',
-      address: '123 Test St',
       date_of_birth: new Date('1990-01-01'),
       gender: 'female' as const,
       role: 'customer' as const,
-      isActive: true,
+      status: true,
       ...overrides
     };
 
@@ -33,14 +31,19 @@ export class TestDataFactory {
 
   // Create test consultant
   static async createTestConsultant(overrides: Partial<IConsultant> = {}): Promise<IConsultant> {
-    const consultantData = {
-      first_name: 'Dr. Test',
-      last_name: 'Consultant',
+    // First create a user for the consultant
+    const user = await this.createTestUser({
+      full_name: 'Dr. Test Consultant',
       email: 'consultant@example.com',
-      phone: '0987654321',
+      role: 'consultant'
+    });
+
+    const consultantData = {
+      user_id: user._id,
       specialization: 'General Medicine',
+      qualifications: 'MD, MBBS',
       experience_years: 5,
-      is_active: true,
+      total_consultations: 0,
       ...overrides
     };
 
@@ -182,6 +185,7 @@ export class TestDataFactory {
   // Create test menstrual cycle data
   static createTestMenstrualCycleData(userId: string, overrides: any = {}): any {
     const today = new Date();
+    const cycleStartDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
     const periodDays = [
       new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000),
       new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000),
@@ -191,8 +195,15 @@ export class TestDataFactory {
 
     return {
       user_id: userId,
+      cycle_start_date: cycleStartDate,
       period_days: periodDays,
+      cycle_length: 28,
       notes: 'Test cycle notes',
+      predicted_cycle_end: new Date(cycleStartDate.getTime() + 28 * 24 * 60 * 60 * 1000),
+      predicted_ovulation_date: new Date(cycleStartDate.getTime() + 14 * 24 * 60 * 60 * 1000),
+      predicted_fertile_start: new Date(cycleStartDate.getTime() + 12 * 24 * 60 * 60 * 1000),
+      predicted_fertile_end: new Date(cycleStartDate.getTime() + 16 * 24 * 60 * 60 * 1000),
+      notification_enabled: true,
       ...overrides
     };
   }
