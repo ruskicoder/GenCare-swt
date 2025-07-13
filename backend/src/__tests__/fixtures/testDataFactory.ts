@@ -31,15 +31,19 @@ export class TestDataFactory {
 
   // Create test consultant
   static async createTestConsultant(overrides: Partial<IConsultant> = {}): Promise<IConsultant> {
-    // First create a user for the consultant
-    const user = await this.createTestUser({
-      full_name: 'Dr. Test Consultant',
-      email: 'consultant@example.com',
-      role: 'consultant'
-    });
+    // Only create a user if user_id is not provided in overrides
+    let user_id = overrides.user_id;
+    if (!user_id) {
+      const user = await this.createTestUser({
+        full_name: 'Dr. Test Consultant',
+        email: 'consultant@example.com',
+        role: 'consultant'
+      });
+      user_id = user._id;
+    }
 
     const consultantData = {
-      user_id: user._id,
+      user_id,
       specialization: 'General Medicine',
       qualifications: 'MD, MBBS',
       experience_years: 5,

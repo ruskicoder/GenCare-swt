@@ -497,7 +497,13 @@ export class AppointmentService {
 
             // Authorization check: Only customer, consultant, staff, or admin can cancel
             const appointmentConsultant = await Consultant.findById(appointment.consultant_id).populate('user_id');
-            const isCustomer = appointment.customer_id.toString() === requestUserId;
+            
+            // Handle populated customer_id (it might be a user object or just an ObjectId)
+            const customerId = appointment.customer_id._id 
+                ? appointment.customer_id._id.toString() 
+                : appointment.customer_id.toString();
+            
+            const isCustomer = customerId === requestUserId;
             const isConsultant = appointmentConsultant && (
                 appointmentConsultant._id.toString() === requestUserId || 
                 appointmentConsultant.user_id._id.toString() === requestUserId
