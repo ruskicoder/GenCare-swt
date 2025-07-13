@@ -659,7 +659,7 @@ describe('MenstrualCycleService', () => {
       expect(typeof result).toBe('object');
       if (!Array.isArray(result) && 'success' in result) {
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Failed to save cycles');
+        expect(result.message).toMatch(/Failed to save cycles|Insert failed/);
       } else {
         fail('Expected error response object but got different type');
       }

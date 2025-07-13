@@ -801,4 +801,5 @@ describe('StiService', () => {
        
        expect(result).toBeDefined();
      });
+  });
 });
