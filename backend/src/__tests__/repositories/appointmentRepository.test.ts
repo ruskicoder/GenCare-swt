@@ -21,6 +21,12 @@ describe('AppointmentRepository', () => {
       end_time: '11:00',
       status: 'pending' as const,
       customer_notes: 'Test appointment',
+      meeting_info: {
+        meet_url: 'https://meet.google.com/test-setup',
+        meeting_id: `setup-meeting-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        created_at: new Date(),
+        reminder_sent: false
+      },
       created_date: new Date(),
       updated_date: new Date()
     };
@@ -38,6 +44,12 @@ describe('AppointmentRepository', () => {
         end_time: '15:00',
         status: 'pending' as const,
         customer_notes: 'New test appointment',
+        meeting_info: {
+          meet_url: 'https://meet.google.com/test-unique-id',
+          meeting_id: `test-meeting-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          created_at: new Date(),
+          reminder_sent: false
+        },
         created_date: new Date(),
         updated_date: new Date()
       };
