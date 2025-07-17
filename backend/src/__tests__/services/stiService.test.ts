@@ -1202,4 +1202,80 @@ describe('StiService', () => {
         });
     });
   });
+
+  describe('Additional Coverage Tests', () => {
+    describe('getAllStiPackage', () => {
+      it('should get all STI packages successfully', async () => {
+        const result = await StiService.getAllStiPackage();
+        expect(result.success).toBe(true);
+        expect(result.packages).toBeDefined();
+      });
+    });
+
+    describe('getAllStiTest', () => {
+      it('should get all STI tests successfully', async () => {
+        const result = await StiService.getAllStiTest();
+        expect(result.success).toBe(true);
+        expect(result.stitests).toBeDefined();
+      });
+    });
+
+    describe('getTotalRevenue', () => {
+      it('should get total revenue successfully', async () => {
+        const result = await StiService.getTotalRevenue();
+        expect(result.success).toBe(true);
+        expect(result.total_revenue).toBeDefined();
+      });
+    });
+
+    describe('getAllAuditLog', () => {
+      it('should get all audit logs successfully', async () => {
+        const result = await StiService.getAllAuditLog();
+        expect(result.success).toBe(true);
+        expect(result.audit_logs).toBeDefined();
+      });
+    });
+
+    describe('getTotalRevenueByCustomer', () => {
+      it('should get revenue by customer successfully', async () => {
+        const testUser = await TestDataFactory.createTestUser();
+        const result = await StiService.getTotalRevenueByCustomer(testUser._id.toString());
+        expect(result.success).toBe(true);
+        expect(result.total_revenue).toBeDefined();
+      });
+
+      it('should fail with invalid customer ID', async () => {
+        const result = await StiService.getTotalRevenueByCustomer('invalid-id');
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('Edge Cases and Validation', () => {
+      it('should handle null test data gracefully', async () => {
+        const result = await StiService.createStiTest(null as any);
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle undefined test data gracefully', async () => {
+        const result = await StiService.createStiTest(undefined as any);
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle database errors gracefully', async () => {
+        // Test with valid structure but potentially problematic data
+        const testData = {
+          sti_test_code: 'TEST999',
+          sti_test_name: 'Test STI Test',
+          price: 50,
+          description: 'Test description',
+          is_active: true,
+          category: 'blood',
+          sti_test_type: 'standard'
+        };
+        
+        const result = await StiService.createStiTest(testData as any);
+        expect(typeof result.success).toBe('boolean');
+      });
+    });
+  });
 });

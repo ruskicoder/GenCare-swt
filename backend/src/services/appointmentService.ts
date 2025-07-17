@@ -1690,7 +1690,11 @@ export class AppointmentService {
             }
 
             // Get appointments using repository
-            const appointments = await AppointmentRepository.findAll(filters);
+            const appointments = await AppointmentRepository.findAll(
+                filters.status,
+                filters.appointment_date?.$gte,
+                filters.appointment_date?.$lte
+            );
 
             return {
                 success: true,

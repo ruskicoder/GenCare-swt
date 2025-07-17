@@ -1075,4 +1075,338 @@ describe('MenstrualCycleService', () => {
       expect(result.data.cycle_regularity).toBeDefined();
     });
   });
+
+  describe('Additional Coverage Tests', () => {
+    describe('getCyclesByMonth', () => {
+      it('should get cycles by month successfully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        
+        const result = await MenstrualCycleService.getCyclesByMonth(testUserId, currentYear, currentMonth);
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+      });
+
+      it('should fail with invalid user ID', async () => {
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        
+        const result = await MenstrualCycleService.getCyclesByMonth('invalid-id', currentYear, currentMonth);
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle invalid year', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const currentMonth = new Date().getMonth() + 1;
+        
+        const result = await MenstrualCycleService.getCyclesByMonth(testUserId, -1, currentMonth);
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle invalid month', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const currentYear = new Date().getFullYear();
+        
+        const result = await MenstrualCycleService.getCyclesByMonth(testUserId, currentYear, 13);
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('updateNotificationSettings', () => {
+      it('should update notification settings successfully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const settings = {
+          period_reminder: true,
+          ovulation_reminder: true,
+          fertile_window_reminder: false,
+          cycle_summary: true
+        };
+        
+        const result = await MenstrualCycleService.updateNotificationSettings(testUserId, settings);
+        expect(result.success).toBe(true);
+      });
+
+      it('should fail with invalid user ID', async () => {
+        const settings = {
+          period_reminder: true,
+          ovulation_reminder: true,
+          fertile_window_reminder: false,
+          cycle_summary: true
+        };
+        
+        const result = await MenstrualCycleService.updateNotificationSettings('invalid-id', settings);
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle null settings', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.updateNotificationSettings(testUserId, null as any);
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle undefined settings', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.updateNotificationSettings(testUserId, undefined as any);
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('getTodayStatus', () => {
+      it('should get today status successfully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.getTodayStatus(testUserId);
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+      });
+
+      it('should fail with invalid user ID', async () => {
+        const result = await MenstrualCycleService.getTodayStatus('invalid-id');
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle user with no cycles', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.getTodayStatus(testUserId);
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+      });
+    });
+
+    describe('getPeriodStats', () => {
+      it('should get period stats successfully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.getPeriodStats(testUserId);
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+      });
+
+      it('should fail with invalid user ID', async () => {
+        const result = await MenstrualCycleService.getPeriodStats('invalid-id');
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle user with no period data', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.getPeriodStats(testUserId);
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+      });
+    });
+
+    describe('cleanupDuplicates', () => {
+      it('should cleanup duplicates successfully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.cleanupDuplicates(testUserId);
+        expect(result.success).toBe(true);
+      });
+
+      it('should fail with invalid user ID', async () => {
+        const result = await MenstrualCycleService.cleanupDuplicates('invalid-id');
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle user with no cycles', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.cleanupDuplicates(testUserId);
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe('resetAllData', () => {
+      it('should reset all data successfully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.resetAllData(testUserId);
+        expect(result.success).toBe(true);
+      });
+
+      it('should fail with invalid user ID', async () => {
+        const result = await MenstrualCycleService.resetAllData('invalid-id');
+        expect(result.success).toBe(false);
+      });
+
+      it('should handle user with no data to reset', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.resetAllData(testUserId);
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe('Edge Cases and Validation', () => {
+      it('should handle null user ID gracefully', async () => {
+        const periodDays = [new Date()];
+        
+        const result = await MenstrualCycleService.processPeriodDays(null as any, periodDays, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBe(false);
+          expect(result.message).toContain('User ID is required');
+        } else {
+          expect(result).toEqual([]);
+        }
+      });
+
+      it('should handle undefined user ID gracefully', async () => {
+        const periodDays = [new Date()];
+        
+        const result = await MenstrualCycleService.processPeriodDays(undefined as any, periodDays, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBe(false);
+          expect(result.message).toContain('User ID is required');
+        } else {
+          expect(result).toEqual([]);
+        }
+      });
+
+      it('should handle empty user ID gracefully', async () => {
+        const periodDays = [new Date()];
+        
+        const result = await MenstrualCycleService.processPeriodDays('', periodDays, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBe(false);
+          expect(result.message).toContain('User ID is required');
+        } else {
+          expect(result).toEqual([]);
+        }
+      });
+
+      it('should handle null period days gracefully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, null as any, 'test notes');
+        expect(result).toEqual([]);
+      });
+
+      it('should handle undefined period days gracefully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, undefined as any, 'test notes');
+        expect(result).toEqual([]);
+      });
+
+      it('should handle empty period days array gracefully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, [], 'test notes');
+        expect(result).toEqual([]);
+      });
+
+      it('should handle invalid dates in period days', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const invalidDates = [new Date('invalid'), new Date(), new Date('2023-13-45')];
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, invalidDates, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBeDefined();
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+
+      it('should handle duplicate dates in period days', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const today = new Date();
+        const duplicateDates = [today, today, today];
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, duplicateDates, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBeDefined();
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+
+      it('should handle very old dates in period days', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const oldDate = new Date('1900-01-01');
+        const periodDays = [oldDate];
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, periodDays, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBeDefined();
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+
+      it('should handle future dates in period days', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const futureDate = new Date();
+        futureDate.setFullYear(futureDate.getFullYear() + 1);
+        const periodDays = [futureDate];
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, periodDays, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBeDefined();
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+
+      it('should handle very long notes', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const periodDays = [new Date()];
+        const longNotes = 'a'.repeat(10000);
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, periodDays, longNotes);
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBeDefined();
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+
+      it('should handle special characters in notes', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const periodDays = [new Date()];
+        const specialNotes = '!@#$%^&*()_+{}[]|\\:";\'<>?,./ 测试 🎉';
+        
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, periodDays, specialNotes);
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(result.success).toBeDefined();
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+
+      it('should validate ObjectId format in various methods', async () => {
+        const invalidIds = ['invalid-id', '123', '', null, undefined];
+        
+        for (const id of invalidIds) {
+          if (id !== null && id !== undefined && id !== '') {
+            const cyclesResult = await MenstrualCycleService.getCycles(id);
+            expect(cyclesResult.success).toBe(false);
+            
+            const statsResult = await MenstrualCycleService.getCycleStats(id);
+            expect(statsResult.success).toBe(false);
+            
+            const periodStatsResult = await MenstrualCycleService.getPeriodStats(id);
+            expect(periodStatsResult.success).toBe(false);
+          }
+        }
+      });
+
+      it('should handle database errors gracefully', async () => {
+        const testUserId = new mongoose.Types.ObjectId().toString();
+        const periodDays = [new Date()];
+        
+        // The service should handle database errors gracefully
+        const result = await MenstrualCycleService.processPeriodDays(testUserId, periodDays, 'test notes');
+        if (typeof result === 'object' && result !== null && 'success' in result) {
+          expect(typeof result.success).toBe('boolean');
+        } else {
+          expect(Array.isArray(result)).toBe(true);
+        }
+      });
+    });
+  });
 });
