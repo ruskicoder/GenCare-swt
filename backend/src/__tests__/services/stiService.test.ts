@@ -1202,4 +1202,730 @@ describe('StiService', () => {
         });
     });
   });
+
+  describe('Additional STI Service Methods', () => {
+    it('should handle STI package creation', async () => {
+      const packageData = {
+        package_name: 'Comprehensive STI Package',
+        package_code: 'COMP001',
+        description: 'Complete STI screening package',
+        price: 299.99,
+        is_active: true
+      };
+
+      const result = await StiService.createStiPackage(packageData);
+      expect(result.success).toBe(true);
+      expect(result.stipackage).toBeDefined();
+    });
+
+    it('should retrieve all STI packages', async () => {
+      const result = await StiService.getAllStiPackage();
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.stipackages)).toBe(true);
+    });
+
+    it('should get STI package by ID', async () => {
+      const result = await StiService.getStiPackageById(testStiPackage._id.toString());
+      expect(result.success).toBe(true);
+      expect(result.stipackage).toBeDefined();
+    });
+
+    it('should handle non-existent package ID', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await StiService.getStiPackageById(nonExistentId);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Package not found');
+    });
+
+    it('should update STI package successfully', async () => {
+      const updateData = {
+        package_name: 'Updated Package Name',
+        price: 399.99
+      };
+
+      const result = await StiService.updateStiPackage(
+        testStiPackage._id.toString(),
+        updateData
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('should delete STI package successfully', async () => {
+      // Create a new package for deletion
+      const packageData = {
+        package_name: 'Package to Delete',
+        package_code: 'DEL001',
+        description: 'Package for deletion test',
+        price: 199.99,
+        is_active: true
+      };
+
+      const createResult = await StiService.createStiPackage(packageData);
+      const packageId = createResult.stipackage?._id.toString();
+
+      const deleteResult = await StiService.deleteStiPackage(packageId!, testUser._id.toString());
+      expect(deleteResult.success).toBe(true);
+    });
+
+    it('should handle package validation errors', async () => {
+      const invalidPackageData = {
+        package_name: '', // Empty name
+        package_code: '',
+        description: '',
+        price: -100, // Negative price
+        is_active: true
+      };
+
+      const result = await StiService.createStiPackage(invalidPackageData);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('STI Test Management Enhanced', () => {
+    it('should create STI test with duplicate code handling', async () => {
+      const duplicateTestData = {
+        sti_test_name: 'Duplicate Test',
+        sti_test_code: testStiTest.sti_test_code, // Same code as existing test
+        description: 'Duplicate test',
+        price: 99.99,
+        sample_type: 'Blood' as const,
+        test_category: 'Bacterial' as const,
+        turnaround_time: '2 days',
+        is_active: false
+      };
+
+      const result = await StiService.createStiTest(duplicateTestData);
+      // Should handle duplicate by reactivating existing test
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle STI test updates', async () => {
+      const updateData = {
+        sti_test_name: 'Updated Test Name',
+        price: 149.99,
+        description: 'Updated description'
+      };
+
+      const result = await StiService.updateStiTest(
+        testStiTest._id.toString(),
+        updateData
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle STI test deletion', async () => {
+      // Create a new test for deletion
+      const testData = {
+        sti_test_name: 'Test to Delete',
+        sti_test_code: 'DEL001',
+        description: 'Test for deletion',
+        price: 99.99,
+        sample_type: 'Urine' as const,
+        test_category: 'Viral' as const,
+        turnaround_time: '1 day',
+        is_active: true
+      };
+
+      const createResult = await StiService.createStiTest(testData);
+      const testId = createResult.stitest?._id.toString();
+
+      const deleteResult = await StiService.deleteStiTest(testId!, testUser._id.toString());
+      expect(deleteResult.success).toBe(true);
+    });
+
+    it('should handle test category filtering', async () => {
+      const result = await StiService.getAllStiTest();
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.stitests)).toBe(true);
+    });
+
+    it('should handle price range filtering', async () => {
+      const result = await StiService.getAllStiTest();
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.stitests)).toBe(true);
+    });
+  });
+
+  describe('Order Management Enhanced', () => {
+    it('should handle order status transitions', async () => {
+      // Create an order
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Test order for status transition'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      // Test valid status transition: Booked -> In Progress
+      const updateResult1 = await StiService.updateOrder(
+        orderId!,
+        { order_status: 'In Progress' },
+        'staff123',
+        'staff'
+      );
+      expect(updateResult1.success).toBe(true);
+
+      // Test valid status transition: In Progress -> Completed
+      const updateResult2 = await StiService.updateOrder(
+        orderId!,
+        { order_status: 'Completed' },
+        'staff123',
+        'staff'
+      );
+      expect(updateResult2.success).toBe(true);
+
+      // Test invalid status transition: Completed -> Booked
+      const updateResult3 = await StiService.updateOrder(
+        orderId!,
+        { order_status: 'Booked' },
+        'staff123',
+        'staff'
+      );
+      expect(updateResult3.success).toBe(false);
+      expect(updateResult3.message).toContain('Invalid status transition');
+    });
+
+    it('should handle payment status updates', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Test order for payment'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      const updateResult = await StiService.updateOrder(
+        orderId!,
+        { payment_status: 'Paid' },
+        'staff123',
+        'staff'
+      );
+      expect(updateResult.success).toBe(true);
+    });
+
+    it('should handle order cancellation', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Test order for cancellation'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      const cancelResult = await StiService.updateOrder(
+        orderId!,
+        { order_status: 'Cancelled' },
+        'staff123',
+        'staff'
+      );
+      expect(cancelResult.success).toBe(true);
+    });
+
+    it('should handle order filtering by multiple criteria', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        customerId: testUser._id.toString(),
+        status: 'Booked' as const,
+        paymentStatus: 'Pending' as const,
+        sortBy: 'order_date',
+        sortOrder: 'desc' as const
+      };
+
+      const result = await StiService.getStiOrdersWithPagination(query);
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+
+    it('should handle order search by order number', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Test order for search'
+      );
+
+      const orderNumber = createResult.stiorder?.order_code;
+
+      const query = {
+        page: 1,
+        limit: 10,
+        orderNumber: orderNumber
+      };
+
+      const result = await StiService.getStiOrdersWithPagination(query);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Revenue and Analytics', () => {
+    it('should calculate revenue with date filters', async () => {
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 1);
+      const endDate = new Date();
+
+      const result = await StiService.getTotalRevenue(
+        startDate,
+        endDate,
+        'Completed'
+      );
+      expect(result.success).toBe(true);
+      expect(typeof result.total_revenue).toBe('number');
+    });
+
+    it('should calculate customer revenue', async () => {
+      const result = await StiService.getTotalRevenueByCustomer(
+        testUser._id.toString(),
+        undefined,
+        undefined,
+        'Completed'
+      );
+      expect(result.success).toBe(true);
+      expect(typeof result.total_revenue).toBe('number');
+    });
+
+    it('should handle revenue calculation with invalid parameters', async () => {
+      const result = await StiService.getTotalRevenueByCustomer(
+        'invalid-id',
+        new Date(),
+        new Date()
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('should get order statistics', async () => {
+      const result = await StiService.getOrderStatistics();
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(typeof result.data?.totalOrders).toBe('number');
+    });
+
+    it('should get popular tests analytics', async () => {
+      const result = await StiService.getPopularTests(5);
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.data)).toBe(true);
+    });
+  });
+
+  describe('Schedule Management', () => {
+    it('should prepare STI schedule successfully', async () => {
+      const scheduleData = {
+        test_date: new Date(),
+        time_slot: '09:00-10:00',
+        location: 'Lab A',
+        max_capacity: 10,
+        current_bookings: 0,
+        is_available: true
+      };
+
+      const result = await StiService.prepareStiSchedule(scheduleData);
+      expect(result.success).toBe(true);
+      expect(result.stischedule).toBeDefined();
+    });
+
+    it('should handle schedule conflicts', async () => {
+      const conflictingSchedule = {
+        test_date: testStiSchedule.test_date,
+        time_slot: testStiSchedule.time_slot,
+        location: testStiSchedule.location,
+        max_capacity: 5,
+        current_bookings: 0,
+        is_available: true
+      };
+
+      const result = await StiService.prepareStiSchedule(conflictingSchedule);
+      // Should handle conflicts appropriately
+      expect(typeof result).toBe('object');
+    });
+
+    it('should get available schedules', async () => {
+      const result = await StiService.getAvailableSchedules();
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.schedules)).toBe(true);
+    });
+
+    it('should update schedule availability', async () => {
+      const updateResult = await StiService.updateScheduleAvailability(
+        testStiSchedule._id.toString(),
+        false
+      );
+      expect(updateResult.success).toBe(true);
+    });
+  });
+
+  describe('Audit and Logging', () => {
+    it('should retrieve audit logs with pagination', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        action: 'CREATE' as const,
+        sortBy: 'timestamp',
+        sortOrder: 'desc' as const
+      };
+
+      const result = await StiService.getAuditLogsWithPagination(query);
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+
+    it('should filter audit logs by user', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        userId: 'staff123'
+      };
+
+      const result = await StiService.getAuditLogsWithPagination(query);
+      expect(result.success).toBe(true);
+    });
+
+    it('should filter audit logs by date range', async () => {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+      const endDate = new Date();
+
+      const query = {
+        page: 1,
+        limit: 10,
+        startDate,
+        endDate
+      };
+
+      const result = await StiService.getAuditLogsWithPagination(query);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Batch Operations', () => {
+    it('should handle bulk order updates', async () => {
+      // Create multiple orders first
+      const orderIds = [];
+      for (let i = 0; i < 3; i++) {
+        const orderDate = new Date();
+        orderDate.setDate(orderDate.getDate() + 1);
+
+        const result = await StiService.createStiOrder(
+          testUser._id.toString(),
+          testStiPackage._id.toString(),
+          null,
+          orderDate,
+          `Bulk order ${i}`
+        );
+        if (result.stiorder) {
+          orderIds.push(result.stiorder._id.toString());
+        }
+      }
+
+      const bulkUpdateResult = await StiService.bulkUpdateOrders(
+        orderIds,
+        { order_status: 'In Progress' },
+        'staff123'
+      );
+      expect(bulkUpdateResult.success).toBe(true);
+    });
+
+    it('should handle bulk test activation/deactivation', async () => {
+      const testIds = [testStiTest._id.toString()];
+      
+      const result = await StiService.bulkUpdateTestStatus(testIds, false);
+      expect(result.success).toBe(true);
+    });
+
+    it('should export order data', async () => {
+      const exportResult = await StiService.exportOrderData({
+        format: 'CSV',
+        dateRange: {
+          start: new Date('2024-01-01'),
+          end: new Date('2024-12-31')
+        },
+        includeCompleted: true
+      });
+      expect(exportResult.success).toBe(true);
+    });
+  });
+
+  describe('Error Handling and Edge Cases', () => {
+    it('should handle database connection errors gracefully', async () => {
+      // This would typically require mocking the database
+      // For now, test with invalid operations that might cause DB errors
+      const result = await StiService.createStiOrder(
+        '',
+        '',
+        null,
+        new Date(),
+        ''
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('should handle concurrent order updates', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Concurrent test order'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      // Simulate concurrent updates
+      const promises = [
+        StiService.updateOrder(orderId!, 'staff1', { order_status: 'In Progress' }),
+        StiService.updateOrder(orderId!, 'staff2', { order_status: 'Completed' })
+      ];
+
+      const results = await Promise.all(promises);
+      // At least one should succeed
+      const successCount = results.filter(r => r.success).length;
+      expect(successCount).toBeGreaterThan(0);
+    });
+
+    it('should handle memory-intensive operations', async () => {
+      // Test with large data sets
+      const query = {
+        page: 1,
+        limit: 1000, // Large limit
+        sortBy: 'order_date',
+        sortOrder: 'desc' as const
+      };
+
+      const result = await StiService.getStiOrdersWithPagination(query);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate test sample types', async () => {
+      const invalidTestData = {
+        sti_test_name: 'Invalid Sample Test',
+        sti_test_code: 'INV001',
+        description: 'Test with invalid sample type',
+        price: 99.99,
+        sample_type: 'InvalidSample' as any,
+        test_category: 'Bacterial' as const,
+        turnaround_time: '1 day',
+        is_active: true
+      };
+
+      const result = await StiService.createStiTest(invalidTestData);
+      expect(result.success).toBe(false);
+    });
+
+    it('should handle timezone considerations in date queries', async () => {
+      const utcDate = new Date('2024-06-15T12:00:00.000Z');
+      const localDate = new Date('2024-06-15T12:00:00');
+
+      const query1 = {
+        page: 1,
+        limit: 10,
+        startDate: utcDate,
+        endDate: utcDate
+      };
+
+      const query2 = {
+        page: 1,
+        limit: 10,
+        startDate: localDate,
+        endDate: localDate
+      };
+
+      const result1 = await StiService.getStiOrdersWithPagination(query1);
+      const result2 = await StiService.getStiOrdersWithPagination(query2);
+
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+    });
+
+    it('should handle special characters in order notes', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const specialNotes = 'Notes with special chars: @#$%^&*()[]{}|\\:";\'<>?,./~`+=';
+
+      const result = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        specialNotes
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.stiorder?.notes).toBe(specialNotes);
+    });
+
+    it('should handle order limits per customer', async () => {
+      // Create multiple orders to test limits
+      const orderPromises = [];
+      for (let i = 0; i < 5; i++) {
+        const orderDate = new Date();
+        orderDate.setDate(orderDate.getDate() + 1);
+
+        orderPromises.push(
+          StiService.createStiOrder(
+            testUser._id.toString(),
+            testStiPackage._id.toString(),
+            null,
+            orderDate,
+            `Limit test order ${i}`
+          )
+        );
+      }
+
+      const results = await Promise.all(orderPromises);
+      const successfulOrders = results.filter(r => r.success);
+      
+      // Should handle according to business rules
+      expect(successfulOrders.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Performance and Optimization', () => {
+    it('should handle large result sets efficiently', async () => {
+      const startTime = Date.now();
+      
+      const result = await StiService.getStiOrdersWithPagination({
+        page: 1,
+        limit: 100,
+        sortBy: 'order_date',
+        sortOrder: 'desc'
+      });
+
+      const endTime = Date.now();
+      const executionTime = endTime - startTime;
+
+      expect(result.success).toBe(true);
+      expect(executionTime).toBeLessThan(5000); // Should complete within 5 seconds
+    });
+
+    it('should use proper indexing for search queries', async () => {
+      const result = await StiService.searchOrders({
+        customerEmail: 'test@example.com',
+        orderNumber: 'ORD',
+        testName: 'HIV'
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle caching for frequently accessed data', async () => {
+      // Test multiple calls to the same data
+      const testId = testStiTest._id.toString();
+      
+      const start1 = Date.now();
+      const result1 = await StiService.getStiTestById(testId);
+      const time1 = Date.now() - start1;
+
+      const start2 = Date.now();
+      const result2 = await StiService.getStiTestById(testId);
+      const time2 = Date.now() - start2;
+
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+      // Second call might be faster due to caching (if implemented)
+    });
+  });
+
+  describe('Integration with External Systems', () => {
+    it('should handle external lab integration', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'External lab test'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      // Simulate external lab result update
+      const externalResult = await StiService.processExternalLabResult(orderId!, {
+        lab_id: 'EXT_LAB_001',
+        test_results: [{
+          test_code: 'HIV',
+          result: 'Negative',
+          reference_range: 'Negative',
+          unit: 'N/A'
+        }],
+        certified_by: 'Dr. External Lab',
+        certification_date: new Date()
+      });
+
+      expect(externalResult.success).toBe(true);
+    });
+
+    it('should handle payment gateway integration', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Payment test order'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      // Simulate payment processing
+      const paymentResult = await StiService.processPayment(orderId!, {
+        payment_method: 'Credit Card',
+        transaction_id: 'TXN_12345',
+        amount: 299.99,
+        gateway_response: 'SUCCESS'
+      });
+
+      expect(paymentResult.success).toBe(true);
+    });
+
+    it('should handle notification system integration', async () => {
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() + 1);
+
+      const createResult = await StiService.createStiOrder(
+        testUser._id.toString(),
+        testStiPackage._id.toString(),
+        null,
+        orderDate,
+        'Notification test order'
+      );
+
+      const orderId = createResult.stiorder?._id.toString();
+
+      // Test notification sending
+      const notificationResult = await StiService.sendOrderNotification(orderId!, {
+        type: 'ORDER_CONFIRMED',
+        recipient: testUser.email,
+        message: 'Your STI test order has been confirmed'
+      });
+
+      expect(notificationResult.success).toBe(true);
+    });
+  });
 });

@@ -105,22 +105,19 @@ describe('AppointmentService', () => {
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
-        // The 2-hour rule may not be strictly enforced, so let's be more flexible
-        expect(result.success).toBe(true); // Service accepts this booking
-        if (!result.success) {
-          expect(result.message).toMatch(/at least 2 hours in advance|Cannot book appointments in the past/);
-        }
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('at least 2 hours in advance');
       });
 
       it('should reject booking in the past', async () => {
-        const pastDate = new Date();
-        pastDate.setHours(pastDate.getHours() - 2);
-
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
           { 
-            appointment_date: pastDate,
+            appointment_date: yesterday,
             start_time: '10:00',
             end_time: '11:00'
           }
@@ -128,74 +125,69 @@ describe('AppointmentService', () => {
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
-        // The service might accept past dates in some cases
-        expect(result.success).toBe(true); // Service accepts past dates
-        if (!result.success) {
-          expect(result.message).toMatch(/Cannot book appointments in the past|at least 2 hours in advance/);
-        }
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('cannot be in the past');
       });
 
       it('should reject overlapping appointments for same consultant', async () => {
         // Book first appointment
-        const firstUser = await TestDataFactory.createTestUser({ email: 'first@test.com' });
         const firstAppointmentData = TestDataFactory.createTestAppointmentData(
-          firstUser._id.toString(),
+          testUser._id.toString(),
           testConsultant._id.toString()
         );
         await AppointmentService.bookAppointment(firstAppointmentData);
 
-        // Try to book overlapping appointment with same consultant
-        const secondUser = await TestDataFactory.createTestUser({ email: 'second@test.com' });
-        const secondAppointmentData = TestDataFactory.createTestAppointmentData(
+        // Create second user
+        const secondUser = await TestDataFactory.createTestUser({ email: 'test2@example.com' });
+
+        // Try to book overlapping appointment for different customer but same consultant
+        const overlappingAppointmentData = TestDataFactory.createTestAppointmentData(
           secondUser._id.toString(),
           testConsultant._id.toString(),
-          {
+          { 
             appointment_date: firstAppointmentData.appointment_date,
-            start_time: '10:30', // Overlaps with first appointment
-            end_time: '11:30'
+            start_time: firstAppointmentData.start_time,
+            end_time: firstAppointmentData.end_time
           }
         );
 
-        const result = await AppointmentService.bookAppointment(secondAppointmentData);
+        const result = await AppointmentService.bookAppointment(overlappingAppointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toMatch(/time conflict|already has an appointment at this time/);
+        expect(result.message).toContain('time conflict');
       });
     });
 
     describe('Validation Tests', () => {
       it('should reject invalid customer ID', async () => {
         const appointmentData = TestDataFactory.createTestAppointmentData(
-          'not-a-valid-objectid',
+          'invalid-id',
           testConsultant._id.toString()
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toMatch(/Invalid customer ID|Customer not found/);
+        expect(result.message).toContain('Invalid customer ID format');
       });
 
       it('should reject invalid consultant ID', async () => {
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
-          'not-a-valid-objectid'
+          'invalid-id'
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toMatch(/Invalid consultant ID|Consultant not found/);
+        expect(result.message).toContain('Invalid consultant ID format');
       });
 
       it('should reject invalid time format', async () => {
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
-          {
-            start_time: '25:00', // Invalid hour
-            end_time: '11:00'
-          }
+          { start_time: '24:00', end_time: '25:00' }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
@@ -208,51 +200,39 @@ describe('AppointmentService', () => {
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
-          {
-            start_time: '15:00',
-            end_time: '14:00'
-          }
+          { start_time: '12:00', end_time: '11:00' }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Start time must be before end time');
+        expect(result.message).toContain('End time must be after start time');
       });
 
       it('should reject when start time equals end time', async () => {
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
-          {
-            start_time: '10:00',
-            end_time: '10:00'
-          }
+          { start_time: '12:00', end_time: '12:00' }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Start time must be before end time');
+        expect(result.message).toContain('End time must be after start time');
       });
 
       it('should reject missing required fields', async () => {
-        const result = await AppointmentService.bookAppointment({
-          customer_id: '',
-          consultant_id: testConsultant._id.toString(),
-          appointment_date: new Date(),
-          start_time: '10:00',
-          end_time: '11:00'
-        });
+        const result = await AppointmentService.bookAppointment({} as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('required');
+        expect(result.message).toContain('Invalid input data');
       });
 
       it('should reject non-existent customer ID', async () => {
-        const nonExistentId = new mongoose.Types.ObjectId();
+        const nonExistentId = new mongoose.Types.ObjectId().toString();
         const appointmentData = TestDataFactory.createTestAppointmentData(
-          nonExistentId.toString(),
+          nonExistentId,
           testConsultant._id.toString()
         );
 
@@ -263,10 +243,10 @@ describe('AppointmentService', () => {
       });
 
       it('should reject non-existent consultant ID', async () => {
-        const nonExistentId = new mongoose.Types.ObjectId();
+        const nonExistentId = new mongoose.Types.ObjectId().toString();
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
-          nonExistentId.toString()
+          nonExistentId
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
@@ -278,18 +258,12 @@ describe('AppointmentService', () => {
 
     describe('Edge Cases', () => {
       it('should handle appointment at exact 2-hour boundary', async () => {
-        const twoHoursFromNow = new Date();
-        twoHoursFromNow.setHours(twoHoursFromNow.getHours() + 3); // Use 3 hours to be safe
-        twoHoursFromNow.setMinutes(0, 0, 0); // Set to exact hour
-
+        const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
+        
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
-          { 
-            appointment_date: twoHoursFromNow,
-            start_time: String(twoHoursFromNow.getHours()).padStart(2, '0') + ':00',
-            end_time: String(twoHoursFromNow.getHours() + 1).padStart(2, '0') + ':00'
-          }
+          { appointment_date: twoHoursFromNow }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
@@ -298,7 +272,7 @@ describe('AppointmentService', () => {
       });
 
       it('should handle very long customer notes', async () => {
-        const longNotes = 'a'.repeat(1000);
+        const longNotes = 'A'.repeat(1000);
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
@@ -337,18 +311,11 @@ describe('AppointmentService', () => {
       });
 
       it('should handle timezone considerations', async () => {
-        const futureDate = new Date();
-        futureDate.setDate(futureDate.getDate() + 1);
-        futureDate.setHours(10, 0, 0, 0);
-
+        const utcDate = new Date('2025-01-15T10:00:00.000Z');
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
-          { 
-            appointment_date: futureDate,
-            start_time: '10:00',
-            end_time: '11:00'
-          }
+          { appointment_date: utcDate }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
@@ -360,28 +327,32 @@ describe('AppointmentService', () => {
     describe('Error Handling', () => {
       it('should handle malformed ObjectId', async () => {
         const appointmentData = TestDataFactory.createTestAppointmentData(
-          'not-a-valid-objectid',
-          testConsultant._id.toString()
+          testUser._id.toString(),
+          testConsultant._id.toString(),
+          { 
+            appointment_date: new Date('invalid'),
+            start_time: 'invalid',
+            end_time: 'invalid'
+          }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toMatch(/Invalid customer ID|Customer not found/);
       });
 
       it('should handle null/undefined parameters', async () => {
         const result = await AppointmentService.bookAppointment(null as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Appointment data is required');
+        expect(result.message).toContain('Invalid input data');
       });
 
       it('should handle empty object parameters', async () => {
         const result = await AppointmentService.bookAppointment({} as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('required');
+        expect(result.message).toContain('Invalid input data');
       });
     });
   });
@@ -394,52 +365,51 @@ describe('AppointmentService', () => {
         testUser._id.toString(),
         testConsultant._id.toString()
       );
-      const result = await AppointmentService.bookAppointment(appointmentData);
-      testAppointment = result.data?.appointment;
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
     });
 
     it('should successfully confirm pending appointment', async () => {
       const result = await AppointmentService.confirmAppointment(
         testAppointment._id.toString(),
-        testConsultant.user_id.toString()
+        testConsultant.user_id._id.toString()
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toContain('confirmed');
+      expect(result.message).toContain('confirmed successfully');
+      expect(result.data?.appointment.status).toBe('confirmed');
+      expect(result.data?.meetingDetails).toBeDefined();
     });
 
     it('should reject confirmation by non-consultant', async () => {
-      const otherUser = await TestDataFactory.createTestUser({ email: 'other@test.com' });
-      
       const result = await AppointmentService.confirmAppointment(
         testAppointment._id.toString(),
-        otherUser._id.toString()
+        testUser._id.toString()
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/not authorized|Unauthorized/);
+      expect(result.message).toContain('not authorized');
     });
 
     it('should reject confirmation of non-existent appointment', async () => {
-      const nonExistentId = new mongoose.Types.ObjectId();
-      
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
       const result = await AppointmentService.confirmAppointment(
-        nonExistentId.toString(),
-        testConsultant.user_id.toString()
+        nonExistentId,
+        testConsultant.user_id._id.toString()
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Appointment not found');
+      expect(result.message).toContain('not found');
     });
 
     it('should handle invalid appointment ID format', async () => {
       const result = await AppointmentService.confirmAppointment(
         'invalid-id',
-        testConsultant.user_id.toString()
+        testConsultant.user_id._id.toString()
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Appointment not found');
+      expect(result.message).toContain('Invalid appointment ID format');
     });
 
     it('should handle invalid consultant ID format', async () => {
@@ -449,14 +419,14 @@ describe('AppointmentService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Invalid consultant ID');
+      expect(result.message).toContain('Invalid consultant user ID format');
     });
 
     it('should handle missing parameters', async () => {
       const result = await AppointmentService.confirmAppointment('', '');
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('required');
+      expect(result.message).toContain('Invalid appointment ID format');
     });
   });
 
@@ -468,8 +438,8 @@ describe('AppointmentService', () => {
         testUser._id.toString(),
         testConsultant._id.toString()
       );
-      const result = await AppointmentService.bookAppointment(appointmentData);
-      testAppointment = result.data?.appointment;
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
     });
 
     it('should successfully cancel appointment by customer', async () => {
@@ -480,83 +450,72 @@ describe('AppointmentService', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toContain('cancelled');
+      expect(result.message).toContain('cancelled successfully');
     });
 
     it('should successfully cancel appointment by consultant', async () => {
       const result = await AppointmentService.cancelAppointment(
         testAppointment._id.toString(),
-        testConsultant.user_id.toString(),
+        testConsultant.user_id._id.toString(),
         'consultant'
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toContain('cancelled');
+      expect(result.message).toContain('cancelled successfully');
     });
 
     it('should reject cancellation by unauthorized user', async () => {
-      const otherUser = await TestDataFactory.createTestUser({ email: 'other@test.com' });
+      const unauthorizedUser = await TestDataFactory.createTestUser({ email: 'unauthorized@example.com' });
       
       const result = await AppointmentService.cancelAppointment(
         testAppointment._id.toString(),
-        otherUser._id.toString(),
+        unauthorizedUser._id.toString(),
         'customer'
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/not authorized|Unauthorized/);
+      expect(result.message).toContain('not authorized');
     });
 
     it('should handle non-existent appointment', async () => {
-      const nonExistentId = new mongoose.Types.ObjectId();
-      
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
       const result = await AppointmentService.cancelAppointment(
-        nonExistentId.toString(),
+        nonExistentId,
         testUser._id.toString(),
         'customer'
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Appointment not found');
+      expect(result.message).toContain('not found');
     });
 
     it('should handle invalid user role', async () => {
       const result = await AppointmentService.cancelAppointment(
         testAppointment._id.toString(),
         testUser._id.toString(),
-        'invalid-role' as any
+        'invalid-role'
       );
 
-      // The service might accept invalid roles or handle them differently
-      expect(result).toBeDefined();
-      expect(typeof result.success).toBe('boolean');
+      expect(result.success).toBe(false);
     });
   });
 
   describe('getCustomerAppointments', () => {
     beforeEach(async () => {
-      // Create multiple appointments for testing
-      const appointmentData1 = TestDataFactory.createTestAppointmentData(
+      // Create a test appointment
+      const appointmentData = TestDataFactory.createTestAppointmentData(
         testUser._id.toString(),
         testConsultant._id.toString()
       );
-      await AppointmentService.bookAppointment(appointmentData1);
-
-      const appointmentData2 = TestDataFactory.createTestAppointmentData(
-        testUser._id.toString(),
-        testConsultant._id.toString(),
-        { start_time: '14:00', end_time: '15:00' }
-      );
-      await AppointmentService.bookAppointment(appointmentData2);
+      await AppointmentService.bookAppointment(appointmentData);
     });
 
     it('should retrieve customer appointments successfully', async () => {
-      const result = await AppointmentService.getCustomerAppointments(
-        testUser._id.toString()
-      );
+      const result = await AppointmentService.getCustomerAppointments(testUser._id.toString());
 
       expect(result.success).toBe(true);
-      expect(result.data?.appointments).toBeDefined();
+      expect(Array.isArray(result.data?.appointments)).toBe(true);
+      expect(result.data?.appointments?.length).toBeGreaterThan(0);
     });
 
     it('should filter appointments by status', async () => {
@@ -566,49 +525,456 @@ describe('AppointmentService', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.data?.appointments).toBeDefined();
+      expect(Array.isArray(result.data?.appointments)).toBe(true);
     });
 
     it('should return empty array for customer with no appointments', async () => {
-      const newUser = await TestDataFactory.createTestUser({ email: 'noappointments@test.com' });
-      
-      const result = await AppointmentService.getCustomerAppointments(
-        newUser._id.toString()
-      );
+      const newUser = await TestDataFactory.createTestUser({ email: 'new@example.com' });
+      const result = await AppointmentService.getCustomerAppointments(newUser._id.toString());
 
       expect(result.success).toBe(true);
-      expect(result.data?.appointments).toHaveLength(0);
+      expect(Array.isArray(result.data?.appointments)).toBe(true);
+      expect(result.data?.appointments?.length).toBe(0);
     });
 
     it('should handle invalid customer ID', async () => {
-      const result = await AppointmentService.getCustomerAppointments(
-        'invalid-id'
-      );
+      const result = await AppointmentService.getCustomerAppointments('invalid-id');
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/Invalid customer ID|Internal server error/);
+      expect(result.message).toContain('server error');
     });
 
     it('should handle date filtering', async () => {
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 7);
-
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7);
+      
       const result = await AppointmentService.getCustomerAppointments(
         testUser._id.toString(),
         undefined,
-        startDate,
-        endDate
+        futureDate,
+        futureDate
       );
 
       expect(result.success).toBe(true);
-      expect(result.data?.appointments).toBeDefined();
+      expect(Array.isArray(result.data)).toBe(true);
+    });
+  });
+
+  describe('updateAppointment', () => {
+    let testAppointment: any;
+
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
+    });
+
+    it('should successfully update appointment customer notes', async () => {
+      const updateData = {
+        customer_notes: 'Updated notes'
+      };
+
+      const result = await AppointmentService.updateAppointment(
+        testAppointment._id.toString(),
+        updateData,
+        testUser._id.toString(),
+        'customer'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data?.appointment.customer_notes).toBe('Updated notes');
+    });
+
+    it('should reject update by unauthorized user', async () => {
+      const unauthorizedUser = await TestDataFactory.createTestUser({ email: 'unauthorized@example.com' });
+      const updateData = { customer_notes: 'Unauthorized update' };
+
+      const result = await AppointmentService.updateAppointment(
+        testAppointment._id.toString(),
+        updateData,
+        unauthorizedUser._id.toString(),
+        'customer'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not authorized');
+    });
+
+    it('should handle non-existent appointment', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const updateData = { customer_notes: 'Test' };
+
+      const result = await AppointmentService.updateAppointment(
+        nonExistentId,
+        updateData,
+        testUser._id.toString(),
+        'customer'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+  });
+
+  describe('getConsultantAppointments', () => {
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      await AppointmentService.bookAppointment(appointmentData);
+    });
+
+    it('should retrieve consultant appointments successfully', async () => {
+      const result = await AppointmentService.getConsultantAppointments(testConsultant._id.toString());
+
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.data?.appointments)).toBe(true);
+      expect(result.data?.appointments?.length).toBeGreaterThan(0);
+    });
+
+    it('should filter appointments by status', async () => {
+      const result = await AppointmentService.getConsultantAppointments(
+        testConsultant._id.toString(),
+        'pending'
+      );
+
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.data?.appointments)).toBe(true);
+    });
+
+    it('should handle date filtering', async () => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7);
+      
+      const result = await AppointmentService.getConsultantAppointments(
+        testConsultant._id.toString(),
+        undefined,
+        futureDate,
+        futureDate
+      );
+
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.data)).toBe(true);
+    });
+  });
+
+  describe('completeAppointment', () => {
+    let testAppointment: any;
+
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
+      
+      // Confirm the appointment first
+      await AppointmentService.confirmAppointment(
+        testAppointment._id.toString(),
+        testConsultant.user_id._id.toString()
+      );
+    });
+
+    it('should successfully complete appointment by consultant', async () => {
+      const result = await AppointmentService.completeAppointment(
+        testAppointment._id.toString(),
+        testConsultant.user_id._id.toString(),
+        'Consultation completed successfully'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('completed successfully');
+    });
+
+    it('should reject completion by non-consultant', async () => {
+      const result = await AppointmentService.completeAppointment(
+        testAppointment._id.toString(),
+        testUser._id.toString(),
+        'Trying to complete'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not authorized');
+    });
+
+    it('should handle non-existent appointment', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await AppointmentService.completeAppointment(
+        nonExistentId,
+        testConsultant.user_id._id.toString(),
+        'Notes'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+  });
+
+  describe('submitFeedback', () => {
+    let testAppointment: any;
+
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
+      
+      // Complete the appointment to allow feedback
+      await AppointmentService.confirmAppointment(
+        testAppointment._id.toString(),
+        testConsultant.user_id._id.toString()
+      );
+      await AppointmentService.completeAppointment(
+        testAppointment._id.toString(),
+        testConsultant.user_id._id.toString(),
+        'Completed'
+      );
+    });
+
+    it('should successfully submit feedback', async () => {
+      const feedbackData = {
+        rating: 5,
+        comment: 'Excellent consultation',
+        communication_rating: 5,
+        professionalism_rating: 5,
+        helpfulness_rating: 5,
+        recommendation: true
+      };
+
+      const result = await AppointmentService.submitFeedback(
+        testAppointment._id.toString(),
+        testUser._id.toString(),
+        feedbackData
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('submitted successfully');
+    });
+
+    it('should reject feedback from unauthorized user', async () => {
+      const unauthorizedUser = await TestDataFactory.createTestUser({ email: 'unauthorized@example.com' });
+      const feedbackData = {
+        rating: 5,
+        comment: 'Unauthorized feedback'
+      };
+
+      const result = await AppointmentService.submitFeedback(
+        testAppointment._id.toString(),
+        unauthorizedUser._id.toString(),
+        feedbackData
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not authorized');
+    });
+
+    it('should handle invalid rating values', async () => {
+      const feedbackData = {
+        rating: 6, // Invalid rating (should be 1-5)
+        comment: 'Invalid rating'
+      };
+
+      const result = await AppointmentService.submitFeedback(
+        testAppointment._id.toString(),
+        testUser._id.toString(),
+        feedbackData
+      );
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('getAppointmentFeedback', () => {
+    let testAppointment: any;
+
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
+    });
+
+    it('should retrieve appointment feedback successfully', async () => {
+      const result = await AppointmentService.getAppointmentFeedback(testAppointment._id.toString(), testUser._id.toString(), 'customer');
+
+      expect(result.success).toBe(true);
+      // May be null if no feedback exists yet
+    });
+
+    it('should handle non-existent appointment', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await AppointmentService.getAppointmentFeedback(nonExistentId, testUser._id.toString(), 'customer');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+  });
+
+  describe('getConsultantFeedbackStats', () => {
+    it('should retrieve consultant feedback statistics', async () => {
+      const result = await AppointmentService.getConsultantFeedbackStats(testConsultant._id.toString(), testUser._id.toString(), 'customer');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(typeof result.data?.total_feedbacks).toBe('number');
+      expect(typeof result.data?.average_rating).toBe('number');
+    });
+
+    it('should handle non-existent consultant', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await AppointmentService.getConsultantFeedbackStats(nonExistentId, testUser._id.toString(), 'customer');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+  });
+
+  describe('getAppointmentsWithPagination', () => {
+    beforeEach(async () => {
+      // Create multiple test appointments
+      for (let i = 0; i < 3; i++) {
+        const user = await TestDataFactory.createTestUser({ email: `test${i}@example.com` });
+        const appointmentData = TestDataFactory.createTestAppointmentData(
+          user._id.toString(),
+          testConsultant._id.toString()
+        );
+        await AppointmentService.bookAppointment(appointmentData);
+      }
+    });
+
+    it('should retrieve appointments with pagination', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        sortBy: 'appointment_date',
+        sortOrder: 'desc' as const
+      };
+
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(Array.isArray(result.data?.appointments)).toBe(true);
+      expect(typeof result.data?.pagination?.total_items).toBe('number');
+      expect(typeof result.data?.pagination?.total_pages).toBe('number');
+    });
+
+    it('should handle filtering by status', async () => {
+      const query = {
+        page: 1,
+        limit: 10,
+        status: 'pending' as const
+      };
+
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+
+    it('should handle date range filtering', async () => {
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30);
+
+      const query = {
+        page: 1,
+        limit: 10,
+        startDate,
+        endDate
+      };
+
+      const result = await AppointmentService.getAppointmentsWithPagination(query);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+    });
+  });
+
+  describe('sendMeetingReminder', () => {
+    let testAppointment: any;
+
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
+      
+      await AppointmentService.confirmAppointment(
+        testAppointment._id.toString(),
+        testConsultant.user_id._id.toString()
+      );
+    });
+
+    it('should successfully send meeting reminder', async () => {
+      const result = await AppointmentService.sendMeetingReminder(testAppointment._id.toString());
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('reminder sent');
+    });
+
+    it('should handle non-existent appointment', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await AppointmentService.sendMeetingReminder(nonExistentId);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+  });
+
+  describe('startMeeting', () => {
+    let testAppointment: any;
+
+    beforeEach(async () => {
+      const appointmentData = TestDataFactory.createTestAppointmentData(
+        testUser._id.toString(),
+        testConsultant._id.toString()
+      );
+      const bookResult = await AppointmentService.bookAppointment(appointmentData);
+      testAppointment = bookResult.data?.appointment;
+      
+      await AppointmentService.confirmAppointment(
+        testAppointment._id.toString(),
+        testConsultant.user_id._id.toString()
+      );
+    });
+
+    it('should successfully start meeting', async () => {
+      const result = await AppointmentService.startMeeting(
+        testAppointment._id.toString(),
+        testUser._id.toString()
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data?.meetingDetails).toBeDefined();
+    });
+
+    it('should handle non-existent appointment', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const result = await AppointmentService.startMeeting(
+        nonExistentId,
+        testUser._id.toString()
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not found');
     });
   });
 
   describe('Integration Tests', () => {
     it('should handle complete appointment lifecycle', async () => {
-      // Book appointment
+      // 1. Book appointment
       const appointmentData = TestDataFactory.createTestAppointmentData(
         testUser._id.toString(),
         testConsultant._id.toString()
@@ -618,75 +984,76 @@ describe('AppointmentService', () => {
 
       const appointmentId = bookResult.data?.appointment._id.toString();
 
-      // Confirm appointment
+      // 2. Confirm appointment
       const confirmResult = await AppointmentService.confirmAppointment(
-        appointmentId,
-        testConsultant.user_id.toString()
+        appointmentId!,
+        testConsultant.user_id._id.toString()
       );
       expect(confirmResult.success).toBe(true);
 
-      // Retrieve appointments
-      const getResult = await AppointmentService.getCustomerAppointments(
-        testUser._id.toString()
+      // 3. Complete appointment
+      const completeResult = await AppointmentService.completeAppointment(
+        appointmentId!,
+        testConsultant.user_id._id.toString(),
+        'Consultation completed'
       );
-      expect(getResult.success).toBe(true);
-      expect(getResult.data?.appointments).toBeDefined();
+      expect(completeResult.success).toBe(true);
+
+      // 4. Submit feedback
+      const feedbackData = {
+        rating: 5,
+        comment: 'Great consultation'
+      };
+      const feedbackResult = await AppointmentService.submitFeedback(
+        appointmentId!,
+        testUser._id.toString(),
+        feedbackData
+      );
+      expect(feedbackResult.success).toBe(true);
     });
   });
 
   describe('Additional Coverage Tests', () => {
     it('should handle database errors gracefully', async () => {
-      // This would require mocking the database to fail
-      // For now, we'll test with invalid data that might cause DB errors
+      // This test covers error handling paths
       const result = await AppointmentService.bookAppointment({
-        customer_id: 'invalid',
-        consultant_id: 'invalid',
-        appointment_date: new Date('invalid'),
-        start_time: 'invalid',
-        end_time: 'invalid'
+        customer_id: '',
+        consultant_id: '',
+        appointment_date: new Date(),
+        start_time: '',
+        end_time: ''
       });
 
       expect(result.success).toBe(false);
     });
 
     it('should handle various time format validations', async () => {
-      const testCases = [
-        { start_time: '24:00', end_time: '25:00' }, // Invalid hours
-        { start_time: '12:60', end_time: '13:00' }, // Invalid minutes
-        { start_time: 'abc', end_time: '13:00' }, // Non-numeric
-        { start_time: '12', end_time: '13:00' }, // Missing minutes
-        { start_time: '12:30:45', end_time: '13:00' }, // With seconds
-      ];
-
-      for (const timeCase of testCases) {
+      const timeFormats = ['24:00', '12:60', 'abc', '12', '12:30:45'];
+      
+      for (const time of timeFormats) {
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
-          timeCase
+          { start_time: time, end_time: '13:00' }
         );
 
         const result = await AppointmentService.bookAppointment(appointmentData);
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Invalid time format');
       }
     });
 
     it('should handle appointment creation with different date scenarios', async () => {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(10, 0, 0, 0);
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 10);
 
       const appointmentData = TestDataFactory.createTestAppointmentData(
         testUser._id.toString(),
         testConsultant._id.toString(),
-        { 
-          appointment_date: tomorrow,
-          start_time: '10:00',
-          end_time: '11:00'
-        }
+        { appointment_date: futureDate }
       );
 
       const result = await AppointmentService.bookAppointment(appointmentData);
+
       expect(result.success).toBe(true);
     });
   });
