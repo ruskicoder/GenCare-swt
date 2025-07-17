@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/1</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -97,7 +97,7 @@
 <a name='L32'></a><a href='#L32'>32</a>
 <a name='L33'></a><a href='#L33'>33</a>
 <a name='L34'></a><a href='#L34'>34</a>
-<a name='L35'></a><a href='#L35'>35</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L35'></a><a href='#L35'>35</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -112,17 +112,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">79x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -131,7 +126,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import mongoose, { Schema, Document } from 'mongoose';</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span></td><td class="text"><pre class="prettyprint lang-js">import mongoose, { Schema, Document } from 'mongoose';
 &nbsp;
 export type TestTypes = 'máu' | 'nước tiểu' | 'dịch ngoáy';
 &nbsp;
@@ -146,12 +146,12 @@ export interface IStiTest extends Document {
     createdBy: mongoose.Types.ObjectId;
 }
 &nbsp;
-const stiTestSchema = <span class="cstat-no" title="statement not covered" >new Schema&lt;IStiTest&gt;({</span>
+const stiTestSchema = new Schema&lt;IStiTest&gt;({
     sti_test_name: { type: String, required: true },
     sti_test_code: {type: String, required: true, unique: true,
     validate: {
-        validator: <span class="fstat-no" title="function not covered" >function (v</span>: string) {
-<span class="cstat-no" title="statement not covered" >            return /^STI-(VIR|BAC|PAR)-(BLD|URN|SWB)-[A-Z0-9]+$/.test(v);</span>
+        validator: function (v: string) {
+            return /^STI-(VIR|BAC|PAR)-(BLD|URN|SWB)-[A-Z0-9]+$/.test(v);
         },
         message: 'Sti_test_code must be in format: "STI-{category}-{type}-{code}", for example, STI-VIR-BLD-HIV'
     }
@@ -165,14 +165,14 @@ const stiTestSchema = <span class="cstat-no" title="statement not covered" >new 
 }, { timestamps: true }
 );
 &nbsp;
-export const <span class="cstat-no" title="statement not covered" >StiTest = mongoose.model&lt;IStiTest&gt;('StiTest', stiTestSchema);</span></pre></td></tr></table></pre>
+export const StiTest = mongoose.model&lt;IStiTest&gt;('StiTest', stiTestSchema);</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-07-17T02:08:46.734Z
+                at 2025-07-17T08:35:12.399Z
             </div>
         <script src="../prettify.js"></script>
         <script>
