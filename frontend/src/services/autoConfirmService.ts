@@ -2,7 +2,7 @@ import { appointmentService } from './appointmentService';
 
 export class AutoConfirmService {
   private static intervalId: NodeJS.Timeout | null = null;
-  private static readonly CHECK_INTERVAL = 5 * 60 * 1000; // 5 phút kiểm tra 1 lần
+  private static readonly CHECK_INTERVAL = 15 * 60 * 1000; // 5 phút kiểm tra 1 lần
   private static readonly AUTO_CONFIRM_THRESHOLD = 30 * 60 * 1000; // 30 phút trước giờ hẹn
 
   /**
@@ -10,11 +10,9 @@ export class AutoConfirmService {
    */
   public static start(): void {
     if (this.intervalId) {
-      console.log('Auto confirm service đã đang chạy');
       return;
     }
 
-    console.log('🚀 Khởi động Auto Confirm Service');
     this.intervalId = setInterval(() => {
       this.checkAndAutoConfirm();
     }, this.CHECK_INTERVAL);
@@ -30,7 +28,6 @@ export class AutoConfirmService {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      console.log('🛑 Dừng Auto Confirm Service');
     }
   }
 
@@ -39,8 +36,6 @@ export class AutoConfirmService {
    */
   private static async checkAndAutoConfirm(): Promise<void> {
     try {
-      console.log('🔍 Kiểm tra appointments cần tự động xác nhận...');
-      
       // Lấy danh sách appointments pending
       const response = await appointmentService.getMyAppointments('pending');
       
@@ -59,7 +54,7 @@ export class AutoConfirmService {
         }
       }
     } catch (error) {
-      console.error('❌ Lỗi khi kiểm tra auto confirm:', error);
+      // Xử lý lỗi trong im lặng
     }
   }
 
@@ -86,13 +81,8 @@ export class AutoConfirmService {
       // Nếu còn <= 30 phút thì tự động xác nhận
       const shouldConfirm = timeUntilAppointment <= this.AUTO_CONFIRM_THRESHOLD && timeUntilAppointment > 0;
 
-      if (shouldConfirm) {
-        console.log(`⏰ Appointment ${appointment._id} sẽ được tự động xác nhận (còn ${Math.round(timeUntilAppointment / 60000)} phút)`);
-      }
-
       return shouldConfirm;
     } catch (error) {
-      console.error('❌ Lỗi khi kiểm tra shouldAutoConfirm:', error);
       return false;
     }
   }
@@ -102,20 +92,14 @@ export class AutoConfirmService {
    */
   private static async autoConfirmAppointment(appointment: any): Promise<void> {
     try {
-      console.log(`✅ Tự động xác nhận appointment ${appointment._id}`);
-      
       const response = await appointmentService.confirmAppointment(appointment._id);
       
       if (response.success) {
-        console.log(`🎉 Đã tự động xác nhận appointment ${appointment._id} thành công`);
-        
         // Hiển thị thông báo cho user
         this.showAutoConfirmNotification(appointment);
-      } else {
-        console.error(`❌ Lỗi khi tự động xác nhận appointment ${appointment._id}:`, response.message);
       }
     } catch (error) {
-      console.error(`❌ Lỗi khi tự động xác nhận appointment ${appointment._id}:`, error);
+      // Xử lý lỗi trong im lặng
     }
   }
 
@@ -162,4 +146,4 @@ export class AutoConfirmService {
   }
 }
 
-export default AutoConfirmService; 
+export default AutoConfirmService;

@@ -43,7 +43,7 @@ const WeeklySlotPicker: React.FC<Props> = ({ consultantId, onSlotSelect, selecte
       currentWeek={currentWeek}
       weeklyData={weeklySlotData}
       selectedSlot={selectedSlot}
-      mode="slot-picker"
+      mode="booking"
       onSlotSelect={handleSlotSelect}
       onPreviousWeek={goToPreviousWeek}
       onNextWeek={goToNextWeek}
@@ -54,4 +54,4 @@ const WeeklySlotPicker: React.FC<Props> = ({ consultantId, onSlotSelect, selecte
   );
 };
 
-export default WeeklySlotPicker; 
+export default WeeklySlotPicker;

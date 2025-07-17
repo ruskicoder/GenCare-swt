@@ -4,17 +4,20 @@ import { Button } from "@/components/ui/button";
 import { consultantService } from '@/services/consultantService';
 import { weeklyScheduleService } from '@/services/weeklyScheduleService';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'react-toastify';
-import { PlusCircle, Search } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Plus, Search } from 'lucide-react';
 import DataTable from 'react-data-table-component';
 import { format } from 'date-fns';
 import ScheduleEditModal from './components/ScheduleEditModal';
 import CopyScheduleModal from './components/CopyScheduleModal';
 
-// Interfaces (sẽ được mở rộng sau)
+// Interfaces
 interface Consultant {
-    consultant_id: string;
-    full_name: string;
+    _id: string; // ID của consultant
+    name: string; // Tên hiển thị của consultant  
+    email: string;
+    specialization: string;
+    user_id?: string; // ID của user (optional nếu cần)
 }
 
 interface Schedule {
@@ -44,29 +47,36 @@ const WeeklyScheduleManagement: React.FC = () => {
     useEffect(() => {
         const fetchConsultants = async () => {
             setLoading(true);
-            console.log('🔍 [DEBUG] Starting to fetch consultants...');
             try {
                 // Lấy tất cả, bỏ qua phân trang bằng cách set limit cao
-                console.log('📡 [DEBUG] Calling consultantService.getAllConsultants(1, 1000)');
                 const response = await consultantService.getAllConsultants(1, 1000); 
-                console.log('📨 [DEBUG] Response from consultantService:', response);
-                
-                if (response.success) {
-                    console.log('✅ [DEBUG] Success! Consultants data:', response.data.consultants);
-                    console.log('📊 [DEBUG] Number of consultants:', response.data.consultants.length);
-                    setConsultants(response.data.consultants);
+                    
+                if (response.data && response.data.consultants) {
+                    console.log('✅ [DEBUG] Consultants response:', response.data.consultants);
+                    
+                    // Map từ ConsultantType sang Consultant interface
+                    const mappedConsultants: Consultant[] = response.data.consultants.map((consultant: any) => {
+                        console.log('🔄 [DEBUG] Mapping consultant:', consultant);
+                        const mapped = {
+                            _id: consultant.consultant_id, // ✅ Dùng consultant_id - đây là ID thực của consultant
+                            name: consultant.full_name, // ✅ Dùng full_name từ user
+                            email: consultant.email,
+                            specialization: consultant.specialization,
+                            user_id: consultant.user_id // Lưu user_id nếu cần
+                        };
+                        console.log('✅ [DEBUG] Mapped to:', mapped);
+                        return mapped;
+                    });
+                    
+                    console.log('📋 [DEBUG] Final consultants list:', mappedConsultants);
+                    setConsultants(mappedConsultants);
                 } else {
-                    console.error('❌ [DEBUG] Response not successful:', response.message);
                     toast.error("Không thể tải danh sách chuyên gia.");
                 }
             } catch (error: any) {
-                console.error('💥 [DEBUG] Error occurred:', error);
-                console.error('💥 [DEBUG] Error response:', error.response?.data);
-                console.error('💥 [DEBUG] Error status:', error.response?.status);
                 toast.error("Lỗi khi tải danh sách chuyên gia: " + (error.response?.data?.message || error.message));
             } finally {
                 setLoading(false);
-                console.log('🏁 [DEBUG] Finished fetching consultants');
             }
         };
 
@@ -81,7 +91,7 @@ const WeeklyScheduleManagement: React.FC = () => {
         }
         setIsLoadingSchedules(true);
         try {
-            const response = await weeklyScheduleService.getConsultantSchedules(selectedConsultantId);
+            const response: any = await weeklyScheduleService.getConsultantSchedules(selectedConsultantId);
             if (response.success) {
                 setSchedules(response.data.schedules);
             } else {
@@ -130,7 +140,7 @@ const WeeklyScheduleManagement: React.FC = () => {
         }
         
         try {
-            const response = await weeklyScheduleService.deleteSchedule(scheduleId);
+            const response: any = await weeklyScheduleService.deleteSchedule(scheduleId);
             if (response.success) {
                 toast.success("Xóa lịch thành công!");
                 fetchSchedules(); // Reload danh sách
@@ -173,9 +183,30 @@ const WeeklyScheduleManagement: React.FC = () => {
             name: 'Hành động',
             cell: (row: Schedule) => (
                 <div className="space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(row._id)}>Sửa</Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteSchedule(row._id)}>Xóa</Button>
-                    <Button variant="secondary" size="sm" onClick={() => handleOpenCopyModal(row._id)}>Sao chép</Button>
+                    <Button 
+                        key={`edit-${row._id}`} 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleOpenEditModal(row._id)}
+                    >
+                        Sửa
+                    </Button>
+                    <Button 
+                        key={`delete-${row._id}`} 
+                        variant="destructive" 
+                        size="sm" 
+                        onClick={() => handleDeleteSchedule(row._id)}
+                    >
+                        Xóa
+                    </Button>
+                    <Button 
+                        key={`copy-${row._id}`} 
+                        variant="secondary" 
+                        size="sm" 
+                        onClick={() => handleOpenCopyModal(row._id)}
+                    >
+                        Sao chép
+                    </Button>
                 </div>
             ),
         },
@@ -197,15 +228,15 @@ const WeeklyScheduleManagement: React.FC = () => {
                         </SelectTrigger>
                         <SelectContent>
                             {consultants.map(c => (
-                                <SelectItem key={c.consultant_id} value={c.consultant_id}>
-                                    {c.full_name}
+                                <SelectItem key={c._id} value={c._id}>
+                                    {c.name}
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
                 </div>
                 <Button onClick={handleOpenCreateModal} disabled={!selectedConsultantId}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
+                    <Plus className="mr-2 h-4 w-4" />
                     Tạo lịch mới
                 </Button>
             </div>
@@ -231,6 +262,13 @@ const WeeklyScheduleManagement: React.FC = () => {
                     scheduleId={editingScheduleId}
                 />
             )}
+            
+            {/* DEBUG: Show selected consultant ID */}
+            {selectedConsultantId && (
+                <div className="mt-4 p-2 bg-gray-100 rounded text-sm">
+                    <strong>🔍 DEBUG:</strong> Selected Consultant ID: {selectedConsultantId}
+                </div>
+            )}
 
             {isCopyModalOpen && (
                 <CopyScheduleModal
@@ -244,4 +282,4 @@ const WeeklyScheduleManagement: React.FC = () => {
     );
 };
 
-export default WeeklyScheduleManagement; 
+export default WeeklyScheduleManagement;

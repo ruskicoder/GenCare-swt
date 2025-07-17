@@ -34,23 +34,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { FaEye, FaEdit, FaTrash, FaPlus, FaUser, FaMale, FaFemale } from 'react-icons/fa';
+import { UserManagementService, UserData, CreateUserData, UpdateUserData } from '@/services/userManagementService';
 
-interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  phone?: string;
-  date_of_birth?: string;
-  gender?: string;
-  role: string;
-  status: boolean;
-  avatar?: string;
-  registration_date: string;
-  last_login?: string;
-  email_verified: boolean;
-}
+const AUTH_TOKEN_KEY = "gencare_auth_token";
 
 interface PaginationInfo {
   total: number;
@@ -67,9 +67,12 @@ interface RoleStats {
 }
 
 interface UserTableProps {
-  users: User[];
+  users: UserData[];
   loading: boolean;
   onStatusChange: (userId: string, newStatus: boolean) => Promise<void>;
+  onViewUser: (user: UserData) => void;
+  onEditUser: (user: UserData) => void;
+  onDeleteUser: (user: UserData) => void;
 }
 
 // Các tiêu đề cho từng loại role
@@ -79,8 +82,675 @@ const ROLE_TITLES = {
   consultant: 'Danh sách tư vấn viên'
 } as const;
 
-const UserTable: React.FC<UserTableProps> = ({ users, loading, onStatusChange }) => {
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+// Create User Modal Component
+interface CreateUserModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  role: 'staff' | 'consultant';
+}
+
+const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSuccess, role }) => {
+  const { user } = useAuth();
+  const [formData, setFormData] = useState<CreateUserData>({
+    email: '',
+    password: '',
+    full_name: '',
+    phone: undefined,
+    date_of_birth: undefined,
+    gender: undefined,
+    role: role,
+    // Staff fields
+    department: undefined,
+    hire_date: undefined,
+    permissions: [],
+    // Consultant fields
+    specialization: undefined,
+    qualifications: undefined,
+    experience_years: undefined
+  });
+  
+  // Debug logging when modal opens or role changes
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log('📝 CreateUserModal opened - role prop:', role, 'formData.role:', formData.role);
+      setFormData(prev => ({ ...prev, role: role }));
+    }
+  }, [isOpen, role]);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    // Client-side validation
+    const errors: string[] = [];
+    
+    if (!formData.email.trim()) errors.push('Email là bắt buộc');
+    if (!formData.password) errors.push('Mật khẩu là bắt buộc');
+    if (!formData.full_name.trim()) errors.push('Họ và tên là bắt buộc');
+    
+    // Date validation - only validate if provided
+    if (formData.date_of_birth && formData.date_of_birth.trim()) {
+      const dobDate = new Date(formData.date_of_birth);
+      if (isNaN(dobDate.getTime())) {
+        errors.push('Ngày sinh không hợp lệ');
+      } else {
+        // Age validation
+        const now = new Date();
+        const age = now.getFullYear() - dobDate.getFullYear();
+        if (age < 13 || age > 100) {
+          errors.push('Tuổi phải từ 13-100');
+        }
+      }
+    }
+    
+    if (role === 'staff') {
+      console.log('🔍 Staff validation - department:', formData.department);
+      if (!formData.department?.trim()) errors.push('Phòng ban là bắt buộc');
+      if (!formData.hire_date?.trim()) errors.push('Ngày bắt đầu làm việc là bắt buộc');
+      else {
+        const hireDateObj = new Date(formData.hire_date);
+        if (isNaN(hireDateObj.getTime())) {
+          errors.push('Ngày bắt đầu làm việc không hợp lệ');
+        }
+      }
+    } else if (role === 'consultant') {
+      console.log('🔍 Consultant validation - specialization:', formData.specialization);
+      if (!formData.specialization?.trim()) errors.push('Chuyên môn là bắt buộc');
+      if (!formData.qualifications?.trim()) errors.push('Bằng cấp/Chứng chỉ là bắt buộc');
+      if (!formData.experience_years || formData.experience_years <= 0) errors.push('Số năm kinh nghiệm phải lớn hơn 0');
+    }
+
+    console.log('🔍 Validation errors:', errors);
+    
+    if (errors.length > 0) {
+      toast.error(errors.join(', '));
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Clean data before sending - Include role-specific fields
+      const cleanData: any = {
+        email: formData.email.trim(),
+        password: formData.password,
+        full_name: formData.full_name.trim(),
+        role: formData.role
+      };
+
+      // Optional basic fields - only if they have meaningful values
+      if (formData.phone?.trim()) {
+        cleanData.phone = formData.phone.trim();
+      }
+      if (formData.date_of_birth?.trim()) {
+        cleanData.date_of_birth = formData.date_of_birth.trim();
+      }
+      if (formData.gender) {
+        cleanData.gender = formData.gender;
+      }
+
+      // Role-specific fields - REQUIRED fields must be included
+      if (role === 'staff') {
+        // Required for Staff model
+        cleanData.department = formData.department?.trim();
+        cleanData.hire_date = formData.hire_date?.trim();
+        cleanData.permissions = formData.permissions || [];
+      } else if (role === 'consultant') {
+        // Required for Consultant model
+        cleanData.specialization = formData.specialization?.trim();
+        cleanData.qualifications = formData.qualifications?.trim();
+        cleanData.experience_years = formData.experience_years;
+      }
+
+      console.log('🔍 Creating user with data:', cleanData);
+      console.log('🎯 Role debug:');
+      console.log('  - role prop:', role);
+      console.log('  - formData.role:', formData.role);
+      console.log('  - cleanData.role:', cleanData.role);
+      console.log('📅 Optional fields debug:');
+      console.log('  - phone:', formData.phone, '→', cleanData.phone || 'not included');
+      console.log('  - date_of_birth:', formData.date_of_birth, '→', cleanData.date_of_birth || 'not included');
+      console.log('  - gender:', formData.gender, '→', cleanData.gender || 'not included');
+      console.log('  - hire_date:', formData.hire_date, '→', cleanData.hire_date || 'not included');
+      console.log('  - permissions:', formData.permissions, '→', cleanData.permissions || 'not included');
+      console.log('🔑 Current user:', user);
+      
+      const response = await UserManagementService.createUser(cleanData);
+      
+      console.log('📝 Response:', response);
+      
+      if (response.success) {
+        toast.success(`Tạo ${role === 'staff' ? 'nhân viên' : 'tư vấn viên'} thành công! Email đã được xác thực tự động.`);
+        onSuccess();
+        onClose();
+        setFormData({
+          email: '',
+          password: '',
+          full_name: '',
+          phone: undefined,
+          date_of_birth: undefined,
+          gender: undefined,
+          role: role,
+          // Staff fields
+          department: undefined,
+          hire_date: undefined,
+          permissions: [],
+          // Consultant fields
+          specialization: undefined,
+          qualifications: undefined,
+          experience_years: undefined
+        });
+      } else {
+        console.error('❌ API Error:', response);
+        toast.error(response.message || 'Có lỗi xảy ra');
+      } 
+    } catch (error: any) {
+      console.error('💥 Exception:', error);
+      console.error('📊 Error details:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.errors?.join(', ') || 
+                          'Không thể tạo tài khoản mới';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>
+            Tạo {role === 'staff' ? 'nhân viên' : 'tư vấn viên'} mới
+          </DialogTitle>
+          <DialogDescription>
+            Nhập thông tin để tạo tài khoản mới
+            <div className="text-xs text-blue-600 mt-1 font-medium">
+              ℹ️ Tài khoản được tạo bởi admin sẽ tự động xác thực email
+            </div>
+            {user && (
+              <div className="text-xs text-gray-500 mt-1">
+                Đăng nhập với role: {user.role} | ID: {user.id}
+              </div>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto pr-2">
+          <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <Label htmlFor="full_name">Họ và tên *</Label>
+            <Input
+              id="full_name"
+              value={formData.full_name}
+              onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="email">Email *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="password">Mật khẩu *</Label>
+            <Input
+              id="password"
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+              required
+              minLength={6}
+              placeholder="Tối thiểu 6 ký tự"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="phone">Số điện thoại <span className="text-gray-400">(tuỳ chọn)</span></Label>
+              <Input
+                id="phone"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value || undefined }))}
+                placeholder="Nhập số điện thoại"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="date_of_birth">Ngày sinh <span className="text-gray-400">(tuỳ chọn)</span></Label>
+              <Input
+                id="date_of_birth"
+                type="date"
+                value={formData.date_of_birth || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value || undefined }))}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="gender">Giới tính <span className="text-gray-400">(tuỳ chọn)</span></Label>
+            <Select
+              value={formData.gender}
+              onValueChange={(value: 'male' | 'female' | 'other') => setFormData(prev => ({ ...prev, gender: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn giới tính" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Nam</SelectItem>
+                <SelectItem value="female">Nữ</SelectItem>
+                <SelectItem value="other">Khác</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Staff-specific fields */}
+          {role === 'staff' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="department">Phòng ban *</Label>
+                  <Select
+                    value={formData.department || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, department: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn phòng ban" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Hành chính</SelectItem>
+                      <SelectItem value="hr">Nhân sự</SelectItem>
+                      <SelectItem value="finance">Tài chính</SelectItem>
+                      <SelectItem value="it">Công nghệ thông tin</SelectItem>
+                      <SelectItem value="marketing">Marketing</SelectItem>
+                      <SelectItem value="medical">Y tế</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="hire_date">Ngày bắt đầu làm việc *</Label>
+                  <Input
+                    id="hire_date"
+                    type="date"
+                    value={formData.hire_date || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, hire_date: e.target.value || undefined }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Quyền hạn <span className="text-gray-400">(tuỳ chọn)</span></Label>
+                <div className="grid grid-cols-2 gap-2 p-2 border rounded-md bg-gray-50">
+                  {[
+                    { id: 'user_management', label: 'Người dùng' },
+                    { id: 'appointment_management', label: 'Lịch hẹn' },
+                    { id: 'sti_management', label: 'STI' },
+                    { id: 'blog_management', label: 'Blog' },
+                    { id: 'system_admin', label: 'Hệ thống' }
+                  ].slice(0, 4).map(permission => (
+                    <div key={permission.id} className="flex items-center space-x-1">
+                      <input
+                        type="checkbox"
+                        id={`permission_${permission.id}`}
+                        checked={formData.permissions?.includes(permission.id) || false}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked;
+                          setFormData(prev => ({
+                            ...prev,
+                            permissions: isChecked
+                              ? [...(prev.permissions || []), permission.id]
+                              : (prev.permissions || []).filter(p => p !== permission.id)
+                          }));
+                        }}
+                        className="rounded border-gray-300 w-3 h-3"
+                      />
+                      <Label 
+                        htmlFor={`permission_${permission.id}`} 
+                        className="text-xs font-normal cursor-pointer"
+                      >
+                        {permission.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Consultant-specific fields */}
+          {role === 'consultant' && (
+            <>
+              <div>
+                <Label htmlFor="specialization">Chuyên môn *</Label>
+                <Select
+                  value={formData.specialization || ''}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, specialization: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn chuyên môn" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gynecology">Phụ khoa</SelectItem>
+                    <SelectItem value="reproductive_health">Sức khỏe sinh sản</SelectItem>
+                    <SelectItem value="family_planning">Kế hoạch hóa gia đình</SelectItem>
+                    <SelectItem value="sexual_health">Sức khỏe tình dục</SelectItem>
+                    <SelectItem value="psychology">Tâm lý học</SelectItem>
+                    <SelectItem value="nutrition">Dinh dưỡng</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="qualifications">Bằng cấp/Chứng chỉ *</Label>
+                  <Input
+                    id="qualifications"
+                    value={formData.qualifications || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, qualifications: e.target.value || undefined }))}
+                    placeholder="VD: Bác sĩ chuyên khoa I..."
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="experience_years">Số năm kinh nghiệm *</Label>
+                  <Input
+                    id="experience_years"
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={formData.experience_years || ''}
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      experience_years: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    placeholder="Năm"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+            <DialogFooter className="shrink-0 mt-3 gap-2">
+              <Button type="button" variant="outline" onClick={onClose} size="sm">
+                Hủy
+              </Button>
+              <Button type="submit" disabled={loading} size="sm">
+                {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Edit User Modal Component
+interface EditUserModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  user: UserData | null;
+}
+
+const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, user }) => {
+  const [formData, setFormData] = useState<UpdateUserData>({
+    full_name: '',
+    phone: '',
+    date_of_birth: '',
+    gender: undefined
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        full_name: user.full_name || '',
+        phone: user.phone || '',
+        date_of_birth: user.date_of_birth || '',
+        gender: user.gender || undefined
+      });
+    }
+  }, [user]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const response = await UserManagementService.updateUser(user.id, formData);
+      if (response.success) {
+        toast.success('Cập nhật thông tin thành công!');
+        onSuccess();
+        onClose();
+      } else {
+        toast.error(response.message || 'Có lỗi xảy ra');
+      }
+    } catch (error) {
+      toast.error('Không thể cập nhật thông tin');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Chỉnh sửa thông tin người dùng</DialogTitle>
+          <DialogDescription>
+            Cập nhật thông tin cho {user?.full_name}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="edit_full_name">Họ và tên</Label>
+            <Input
+              id="edit_full_name"
+              value={formData.full_name}
+              onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="edit_phone">Số điện thoại</Label>
+            <Input
+              id="edit_phone"
+              value={formData.phone}
+              onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="edit_date_of_birth">Ngày sinh</Label>
+            <Input
+              id="edit_date_of_birth"
+              type="date"
+              value={formData.date_of_birth}
+              onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="edit_gender">Giới tính</Label>
+            <Select
+              value={formData.gender}
+              onValueChange={(value: 'male' | 'female' | 'other') => setFormData(prev => ({ ...prev, gender: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn giới tính" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Nam</SelectItem>
+                <SelectItem value="female">Nữ</SelectItem>
+                <SelectItem value="other">Khác</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Đang cập nhật...' : 'Cập nhật'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// User Detail Modal Component
+interface UserDetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  user: UserData | null;
+}
+
+const UserDetailModal: React.FC<UserDetailModalProps> = ({ isOpen, onClose, user }) => {
+  if (!user) return null;
+
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString('vi-VN');
+    } catch {
+      return 'N/A';
+    }
+  };
+
+  const getRoleDisplay = (role: string) => {
+    const roleMap = {
+      customer: 'Khách hàng',
+      staff: 'Nhân viên', 
+      consultant: 'Tư vấn viên',
+      admin: 'Quản trị viên'
+    };
+    return roleMap[role as keyof typeof roleMap] || role;
+  };
+
+  const getGenderDisplay = (gender?: string) => {
+    const genderMap = {
+      male: 'Nam',
+      female: 'Nữ',
+      other: 'Khác'
+    };
+    return gender ? genderMap[gender as keyof typeof genderMap] || 'Chưa cập nhật' : 'Chưa cập nhật';
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Thông tin chi tiết</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Avatar và thông tin cơ bản */}
+          <div className="flex items-center space-x-4">
+            <Avatar className="w-16 h-16">
+              <AvatarImage src={user.avatar} alt={user.full_name} />
+              <AvatarFallback className="text-lg">{user.full_name.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <div>
+              <h3 className="text-lg font-semibold">{user.full_name}</h3>
+              <Badge variant={user.role === 'customer' ? 'default' : user.role === 'staff' ? 'secondary' : 'outline'}>
+                {getRoleDisplay(user.role)}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Thông tin liên hệ */}
+          <div className="space-y-3">
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Email</Label>
+              <p className="text-sm">{user.email}</p>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Số điện thoại</Label>
+              <p className="text-sm">{user.phone || 'Chưa cập nhật'}</p>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Ngày sinh</Label>
+              <p className="text-sm">{user.date_of_birth ? formatDate(user.date_of_birth) : 'Chưa cập nhật'}</p>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Giới tính</Label>
+              <p className="text-sm flex items-center">
+                {user.gender === 'male' && <FaMale className="mr-1 text-blue-500" />}
+                {user.gender === 'female' && <FaFemale className="mr-1 text-pink-500" />}
+                {getGenderDisplay(user.gender)}
+              </p>
+            </div>
+          </div>
+
+          {/* Thông tin tài khoản */}
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Trạng thái tài khoản</Label>
+              <p>
+                <Badge variant={user.status ? 'default' : 'destructive'}>
+                  {user.status ? 'Đang hoạt động' : 'Đã khóa'}
+                </Badge>
+              </p>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Email đã xác thực</Label>
+              <p>
+                <Badge variant={user.email_verified ? 'default' : 'secondary'}>
+                  {user.email_verified ? 'Đã xác thực' : 'Chưa xác thực'}
+                </Badge>
+              </p>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Ngày đăng ký</Label>
+              <p className="text-sm">{formatDate(user.registration_date)}</p>
+            </div>
+            
+            {user.last_login && (
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Đăng nhập lần cuối</Label>
+                <p className="text-sm">{formatDate(user.last_login)}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button onClick={onClose}>Đóng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const UserTable: React.FC<UserTableProps> = ({ 
+  users, 
+  loading, 
+  onStatusChange, 
+  onViewUser, 
+  onEditUser, 
+  onDeleteUser 
+}) => {
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [newStatus, setNewStatus] = useState(false);
 
@@ -138,17 +808,50 @@ const UserTable: React.FC<UserTableProps> = ({ users, loading, onStatusChange })
                 </span>
               </TableCell>
               <TableCell>
-                <Button
-                  variant={user.status ? "destructive" : "default"}
-                  size="sm"
-                  onClick={() => {
-                    setSelectedUser(user);
-                    setNewStatus(!user.status);
-                    setShowStatusDialog(true);
-                  }}
-                >
-                  {user.status ? 'Khóa' : 'Kích hoạt'}
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onViewUser(user)}
+                    title="Xem chi tiết"
+                  >
+                    <FaEye className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEditUser(user)}
+                    title="Chỉnh sửa"
+                  >
+                    <FaEdit className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button
+                    variant={user.status ? "destructive" : "default"}
+                    size="sm"
+                    onClick={() => {
+                      setSelectedUser(user);
+                      setNewStatus(!user.status);
+                      setShowStatusDialog(true);
+                    }}
+                    title={user.status ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'}
+                  >
+                    {user.status ? 'Khóa' : 'Kích hoạt'}
+                  </Button>
+                  
+                  {user.role !== 'customer' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onDeleteUser(user)}
+                      title="Xóa tài khoản"
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <FaTrash className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -182,7 +885,7 @@ const UserTable: React.FC<UserTableProps> = ({ users, loading, onStatusChange })
 const UserManagement: React.FC = () => {
   const { user } = useAuth();
   const [selectedRole, setSelectedRole] = useState('customer');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
     total: 0,
     page: 1,
@@ -193,30 +896,30 @@ const UserManagement: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createModalRole, setCreateModalRole] = useState<'staff' | 'consultant'>('staff');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem(import.meta.env.VITE_AUTH_TOKEN_KEY);
-      if (!token) {
-        toast.error('Phiên đăng nhập đã hết hạn');
-        return;
-      }
-
-      let url = `${import.meta.env.VITE_API_URL}/profile/getAllUsers?page=${pagination.page}&limit=${pagination.limit}&role=${selectedRole}`;
-      if (search) url += `&search=${search}`;
-      if (statusFilter !== 'all') url += `&status=${statusFilter}`;
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      setLoading(true);
+      const response = await UserManagementService.getUsers({
+        page: pagination.page,
+        limit: pagination.limit,
+        role: selectedRole as any,
+        search,
+        status: statusFilter === 'all' ? undefined : statusFilter === 'true'
       });
 
-      const data = await response.json();
-      if (data.success) {
-        setUsers(data.data.users);
-        setPagination(data.data.pagination);
+      if (response.success && response.data) {
+        setUsers(response.data.users);
+        setPagination(response.data.pagination);
       } else {
-        toast.error(data.message || 'Có lỗi xảy ra');
+        toast.error(response.message || 'Có lỗi xảy ra');
       }
     } catch (error) {
       toast.error('Không thể tải danh sách người dùng');
@@ -227,36 +930,51 @@ const UserManagement: React.FC = () => {
 
   const handleStatusChange = async (userId: string, newStatus: boolean) => {
     try {
-      const token = localStorage.getItem(import.meta.env.VITE_AUTH_TOKEN_KEY);
-      if (!token) {
-        toast.error('Phiên đăng nhập đã hết hạn');
-        return;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/profile/${userId}/status`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ status: newStatus })
-        }
-      );
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await UserManagementService.updateUserStatus(userId, newStatus);
+      if (response.success) {
         setUsers(users.map(u => 
           u.id === userId ? { ...u, status: newStatus } : u
         ));
-        toast.success(data.message);
+        toast.success(response.message || 'Cập nhật trạng thái thành công');
       } else {
-        toast.error(data.message || 'Có lỗi xảy ra');
+        toast.error(response.message || 'Có lỗi xảy ra');
       }
     } catch (error) {
       toast.error('Không thể cập nhật trạng thái tài khoản');
     }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const response = await UserManagementService.deleteUser(selectedUser.id);
+      if (response.success) {
+        setUsers(users.filter(u => u.id !== selectedUser.id));
+        toast.success('Xóa tài khoản thành công');
+        setShowDeleteDialog(false);
+        setSelectedUser(null);
+      } else {
+        toast.error(response.message || 'Có lỗi xảy ra');
+      }
+    } catch (error) {
+      toast.error('Không thể xóa tài khoản');
+    }
+  };
+
+  const handleViewUser = (user: UserData) => {
+    setSelectedUser(user);
+    setShowDetailModal(true);
+  };
+
+  const handleEditUser = (user: UserData) => {
+    setSelectedUser(user);
+    setShowEditModal(true);
+  };
+
+  const handleDeleteUserConfirm = (user: UserData) => {
+    setSelectedUser(user);
+    setShowDeleteDialog(true);
   };
 
   useEffect(() => {
@@ -340,8 +1058,12 @@ const UserManagement: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl font-semibold">{title}</CardTitle>
                   {role !== 'customer' && (
-                    <Button variant="default">
-                      Thêm {role === 'staff' ? 'nhân viên' : 'tư vấn viên'} mới
+                    <Button variant="default" onClick={() => {
+                      console.log('🚀 Opening CreateUserModal for role:', role, 'selectedRole:', selectedRole);
+                      setCreateModalRole(role as 'staff' | 'consultant');
+                      setShowCreateModal(true);
+                    }}>
+                      <FaPlus className="mr-2" /> Thêm {role === 'staff' ? 'nhân viên' : 'tư vấn viên'} mới
                     </Button>
                   )}
                 </div>
@@ -350,7 +1072,6 @@ const UserManagement: React.FC = () => {
                     <Input
                       placeholder="Tìm kiếm theo tên hoặc email..."
                       value={search}
-                      
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </div>
@@ -374,12 +1095,112 @@ const UserManagement: React.FC = () => {
                   users={users}
                   loading={loading}
                   onStatusChange={handleStatusChange}
+                  onViewUser={handleViewUser}
+                  onEditUser={handleEditUser}
+                  onDeleteUser={handleDeleteUserConfirm}
                 />
+                
+                {/* Pagination Controls */}
+                {pagination.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6">
+                    <div className="text-sm text-gray-500">
+                      Hiển thị {(pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} của {pagination.total} người dùng
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                        disabled={pagination.page === 1}
+                      >
+                        Trước
+                      </Button>
+                      
+                      <div className="flex space-x-1">
+                        {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (pagination.totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (pagination.page <= 3) {
+                            pageNum = i + 1;
+                          } else if (pagination.page >= pagination.totalPages - 2) {
+                            pageNum = pagination.totalPages - 4 + i;
+                          } else {
+                            pageNum = pagination.page - 2 + i;
+                          }
+                          
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={pagination.page === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                        disabled={pagination.page === pagination.totalPages}
+                      >
+                        Sau
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         ))}
       </Tabs>
+
+      <CreateUserModal
+        isOpen={showCreateModal}
+        onClose={() => {
+          console.log('🔍 Closing CreateUserModal - createModalRole:', createModalRole);
+          setShowCreateModal(false);
+        }}
+        onSuccess={() => {
+          console.log('🎉 Success callback - createModalRole:', createModalRole);
+          fetchUsers();
+        }}
+        role={createModalRole}
+      />
+
+      <EditUserModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={fetchUsers}
+        user={selectedUser}
+      />
+
+      <UserDetailModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        user={selectedUser}
+      />
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa tài khoản</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa tài khoản của {selectedUser?.full_name}? Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser}>
+              Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

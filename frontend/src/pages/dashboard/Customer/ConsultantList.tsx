@@ -51,31 +51,45 @@ const ConsultantList: React.FC = () => {
       setError('');
       
       console.log('Fetching consultants with specialization:', filterSpecialization);
-      const response = await consultantService.getAllConsultants(
-        1, 
-        100, // Get more consultants
-        filterSpecialization === 'all' ? undefined : filterSpecialization
-      );
+      let response;
+      
+      if (filterSpecialization === 'all') {
+        // Get all consultants
+        response = await consultantService.getAllConsultants(1, 100);
+      } else {
+        // Use search endpoint with specialization filter
+        response = await consultantService.searchConsultants('', {
+          specialization: filterSpecialization
+        });
+      }
       
       console.log('API Response:', response);
       
-      if (response.success && response.data) {
-        const consultantsData = response.data.consultants || [];
+      const apiResponse = response as ApiResponse;
+      if (apiResponse.success && apiResponse.data) {
+        const consultantsData = apiResponse.data.consultants || [];
         console.log('Consultants data:', consultantsData);
         
         // Add mock additional fields for better display
-        const enrichedConsultants = consultantsData.map((consultant: Consultant) => ({
-          ...consultant,
-          rating: Math.random() * 2 + 3, // Random rating between 3-5
-          total_consultations: Math.floor(Math.random() * 500) + 50, // Random consultations
-          bio: `Chuyên gia ${consultant.specialization} với ${consultant.experience_years} năm kinh nghiệm.`,
-          is_available: Math.random() > 0.2 // 80% available
-        }));
+        const enrichedConsultants = consultantsData.map((consultant: Consultant, index: number) => {
+          // Create consistent random values based on consultant ID to avoid re-randomization
+          const seed = consultant.consultant_id ? consultant.consultant_id.length + index : index;
+          const rating = (seed % 20) / 10 + 3.5; // Rating between 3.5-5.5, then clamp to 3-5
+          const clampedRating = Math.min(Math.max(rating, 3), 5);
+          
+          return {
+            ...consultant,
+            rating: Math.round(clampedRating * 10) / 10, // Round to 1 decimal
+            total_consultations: (seed * 37) % 500 + 50, // Deterministic consultations
+            bio: `Chuyên gia ${consultant.specialization} với ${consultant.experience_years} năm kinh nghiệm.`,
+            is_available: true // Always available by default
+          };
+        });
         
         setConsultants(enrichedConsultants);
       } else {
-        console.error('Failed to fetch consultants:', response.message);
-        setError(response.message || 'Không thể tải danh sách chuyên gia');
+        console.error('Failed to fetch consultants:', apiResponse.message);
+        setError(apiResponse.message || 'Không thể tải danh sách chuyên gia');
       }
     } catch (err: any) {
       console.error('Error fetching consultants:', err);
@@ -130,7 +144,7 @@ const ConsultantList: React.FC = () => {
           </div>
         </div>
       ),
-      minWidth: '200px',
+      style: { minWidth: '200px' },
       sortable: true,
       selector: row => row.full_name,
     },
@@ -138,14 +152,14 @@ const ConsultantList: React.FC = () => {
       name: 'Chuyên khoa',
       selector: row => row.specialization,
       sortable: true,
-      minWidth: '150px',
+      style: { minWidth: '150px' },
     },
     {
       name: 'Kinh nghiệm',
       selector: row => row.experience_years || 0,
       format: row => `${row.experience_years || 0} năm`,
       sortable: true,
-      minWidth: '100px',
+      style: { minWidth: '100px' },
     },
     {
       name: 'Đánh giá',
@@ -161,29 +175,24 @@ const ConsultantList: React.FC = () => {
       ),
       sortable: true,
       selector: row => row.rating || 0,
-      minWidth: '140px',
+      style: { minWidth: '140px' },
     },
     {
       name: 'Tư vấn',
       selector: row => row.total_consultations || 0,
       format: row => `${row.total_consultations || 0} buổi`,
       sortable: true,
-      minWidth: '100px',
+      style: { minWidth: '100px' },
     },
     {
       name: 'Trạng thái',
       cell: row => (
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          row.is_available 
-            ? 'bg-green-100 text-green-800' 
-            : 'bg-red-100 text-red-800'
-        }`}>
-          {row.is_available ? 'Có thể tư vấn' : 'Tạm nghỉ'}
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          Sẵn sàng tư vấn
         </span>
       ),
-      sortable: true,
-      selector: row => row.is_available ? 1 : 0,
-      minWidth: '120px',
+      sortable: false,
+      style: { minWidth: '120px' },
     },
     {
       name: 'Hành động',
@@ -206,7 +215,7 @@ const ConsultantList: React.FC = () => {
         </div>
       ),
       ignoreRowClick: true,
-      minWidth: '150px',
+      style: { minWidth: '150px' },
     },
   ];
 
@@ -388,4 +397,4 @@ const ConsultantList: React.FC = () => {
   );
 };
 
-export default ConsultantList; 
+export default ConsultantList;

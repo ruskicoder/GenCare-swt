@@ -1,3 +1,7 @@
+// Load environment variables FIRST
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,7 +11,6 @@ import { errorHandler } from './middlewares/errorHandler';
 import session from 'express-session';
 import passport from './configs/passport';
 import redisClient from './configs/redis';
-require('dotenv').config();
 import blogController from './controllers/blogController';
 import weeklyScheduleController from './controllers/weeklyScheduleController';
 import appointmentController from './controllers/appointmentController';
@@ -15,9 +18,15 @@ import consultantController from './controllers/consultantController';
 import profileController from './controllers/profileController';
 import stiController from './controllers/stiController';
 import { ReminderSchedulerService } from './services/reminderSchedulerService';
+import menstrualCycleController from './controllers/menstrualCycleController';
+import pillTrackingController from './controllers/pillTrackingController'
+import { PillTrackingReminderService } from './services/pillTrackingService';
+import appointmentHistoryController from './controllers/appointmentHistoryController';
+import stiAssessmentRoutes from './controllers/stiAssessmentController';
+import userController from './controllers/userController';
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet());
@@ -51,7 +60,7 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 // Session middleware
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    secret: process.env.SESSION_SECRET ?? 'your-secret-key',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -71,9 +80,14 @@ app.use('/api/auth', authController);
 app.use('/api/blogs', blogController);
 app.use('/api/weekly-schedule', weeklyScheduleController);
 app.use('/api/appointments', appointmentController);
+app.use('/api/appointment-history', appointmentHistoryController);
 app.use('/api/consultants', consultantController);
 app.use('/api/profile', profileController);
+app.use('/api/users', userController);
 app.use('/api/sti', stiController);
+app.use('/api/menstrual-cycle', menstrualCycleController);
+app.use('/api/pill-tracking', pillTrackingController);
+app.use('/api/sti-assessment', stiAssessmentRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -116,6 +130,8 @@ const startServer = async () => {
     console.log('⏰ Starting reminder scheduler...');
     ReminderSchedulerService.startScheduler();
     console.log('✅ Reminder scheduler started!');
+    PillTrackingReminderService.startPillReminder();
+    console.log('✅ Pill reminder scheduler started!');
 
     console.log('🎉 All services started successfully!');
     console.log('📋 Available services:');
@@ -143,6 +159,8 @@ process.on('SIGINT', async () => {
     ReminderSchedulerService.stopScheduler();
     console.log('✅ Reminder scheduler stopped');
 
+    PillTrackingReminderService.stopPillReminder();
+    console.log('✅ Pill reminder scheduler stopped');
     // Close Redis connection
     await redisClient.quit();
     console.log('✅ Redis connection closed');

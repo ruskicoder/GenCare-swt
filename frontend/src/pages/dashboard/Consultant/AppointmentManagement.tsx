@@ -4,49 +4,42 @@ import { vi } from 'date-fns/locale';
 import DataTable, { TableColumn } from 'react-data-table-component';
 import { useAuth } from '../../../contexts/AuthContext';
 import axios from 'axios';
-import Icon from '../../../components/icons/IconMapping';
+import { appointmentService } from '../../../services/appointmentService';
 import AutoConfirmStatus from '../../../components/common/AutoConfirmStatus';
-
-interface Appointment {
-  _id: string;
-  customer_id: {
-    _id: string;
-    full_name: string;
-    email: string;
-    phone?: string;
-  } | null;
-  appointment_date: string;
-  start_time: string;
-  end_time: string;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
-  customer_notes?: string;
-  consultant_notes?: string;
-  created_date: string;
-}
-
-interface ApiResponse {
-  success: boolean;
-  message: string;
-  data: {
-    appointments: Appointment[];
-    total: number;
-  };
-}
-
-interface AppointmentStats {
-  total: number;
-  pending: number;
-  confirmed: number;
-  completed: number;
-  cancelled: number;
-  today: number;
-}
+import AppointmentDetailModal from '../../../components/appointments/AppointmentDetailModal';
+import GoogleAuthStatus from '../../../components/common/GoogleAuthStatus';
+import { getGoogleAccessToken, hasGoogleAccessToken } from '../../../utils/authUtils';
+import { 
+  Appointment,
+  AppointmentQuery,
+  PaginationInfo,
+  AppointmentStats
+} from '../../../types/appointment';
+import { 
+  FaCalendarAlt, 
+  FaCheckCircle, 
+  FaTimesCircle, 
+  FaHourglassHalf, 
+  FaPlay, 
+  FaEye, 
+  FaComments, 
+  FaTrophy,
+  FaExclamationTriangle,
+  FaClock,
+  FaSpinner,
+  FaCheck,
+  FaTimes,
+  FaLink,
+  FaSearch,
+  FaChevronLeft,
+  FaChevronRight,
+  FaFilter
+} from 'react-icons/fa';
 
 const AppointmentManagement: React.FC = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>('all');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [consultantNotes, setConsultantNotes] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<string>('');
@@ -56,12 +49,32 @@ const AppointmentManagement: React.FC = () => {
     confirmed: 0,
     completed: 0,
     cancelled: 0,
+    in_progress: 0,
     today: 0
+  });
+
+  // Pagination states
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    current_page: 1,
+    total_pages: 1,
+    total_items: 0,
+    items_per_page: 10,
+    has_next: false,
+    has_prev: false
+  });
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [query, setQuery] = useState<AppointmentQuery>({
+    page: 1,
+    limit: 10,
+    sort_by: 'appointment_date',
+    sort_order: 'asc'
   });
 
   const statusLabels = {
     pending: 'Chờ xác nhận',
     confirmed: 'Đã xác nhận',
+    in_progress: 'Đang tư vấn',
     completed: 'Đã hoàn thành',
     cancelled: 'Đã hủy'
   };
@@ -69,7 +82,8 @@ const AppointmentManagement: React.FC = () => {
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     confirmed: 'bg-green-100 text-green-800 border-green-200',
-    completed: 'bg-blue-100 text-blue-800 border-blue-200',
+    in_progress: 'bg-blue-100 text-blue-800 border-blue-200',
+    completed: 'bg-green-100 text-green-800 border-green-200',
     cancelled: 'bg-red-100 text-red-800 border-red-200'
   };
 
@@ -77,13 +91,27 @@ const AppointmentManagement: React.FC = () => {
     { value: 'all', label: 'Tất cả', count: stats.total },
     { value: 'pending', label: 'Chờ xác nhận', count: stats.pending },
     { value: 'confirmed', label: 'Đã xác nhận', count: stats.confirmed },
+    { value: 'in_progress', label: 'Đang tư vấn', count: stats.in_progress },
     { value: 'completed', label: 'Đã hoàn thành', count: stats.completed },
     { value: 'cancelled', label: 'Đã hủy', count: stats.cancelled }
   ];
 
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(prev => ({
+        ...prev,
+        page: 1,
+        search: searchTerm.trim() || undefined
+      }));
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   useEffect(() => {
     fetchAppointments();
-  }, [filter]);
+  }, [query]);
 
   // Cập nhật UI mỗi phút để refresh thời gian completion
   useEffect(() => {
@@ -115,44 +143,26 @@ const AppointmentManagement: React.FC = () => {
         return;
       }
       
-      console.log('🔍 Fetching appointments for consultant:', user.full_name, 'Role:', user.role);
+      console.log('🔍 Fetching consultant appointments with query:', query);
+      const response = await appointmentService.getConsultantAppointmentsPaginated(query);
       
-      const queryParams = new URLSearchParams();
-      if (filter !== 'all') {
-        queryParams.append('status', filter);
-      }
-
-      const response = await axios.get(`http://localhost:3000/api/appointments/consultant-appointments?${queryParams}`);
-
-      console.log('📡 API Response status:', response.status);
-      
-      if (response.data.success) {
-        console.log('✅ Successfully loaded', response.data.data.appointments.length, 'appointments');
-        
-        // Log tất cả các lịch hẹn để kiểm tra
-        console.log('📋 All appointments:', response.data.data.appointments);
+      if (response.success) {
+        console.log('✅ Appointments loaded:', response.data.appointments.length);
         
         // Filter out appointments with null customer_id
-        const validAppointments = response.data.data.appointments.filter((appointment: Appointment) => {
+        const validAppointments = response.data.appointments.filter((appointment: Appointment) => {
           const isValid = appointment && appointment.customer_id && appointment.customer_id.full_name;
-          if (!isValid) {
-            console.log('❌ Invalid appointment:', appointment);
-          }
           return isValid;
         });
         
-        if (validAppointments.length !== response.data.data.appointments.length) {
-          console.warn('⚠️ Filtered out', response.data.data.appointments.length - validAppointments.length, 'invalid appointments');
-        }
-        
         setAppointments(validAppointments);
+        setPagination(response.data.pagination);
         calculateStats(validAppointments);
       } else {
-        console.error('❌ API Error:', response.data.message);
-        showNotification('error', response.data.message || 'Không thể tải danh sách lịch hẹn');
+        showNotification('error', response.message || 'Không thể tải danh sách lịch hẹn');
       }
     } catch (err: any) {
-      console.error('💥 Network Error:', err);
+      console.error('Error fetching appointments:', err);
       if (err.response?.status === 401) {
         showNotification('error', 'Token đã hết hạn. Vui lòng đăng nhập lại');
         window.location.href = '/auth/login';
@@ -164,6 +174,38 @@ const AppointmentManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setQuery(prev => ({ ...prev, page }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStatusFilter = (status: string) => {
+    setQuery(prev => ({
+      ...prev,
+      page: 1,
+      status: status === 'all' ? undefined : status
+    }));
+  };
+
+  const handleSortChange = (sort_by: string, sort_order: 'asc' | 'desc') => {
+    setQuery(prev => ({
+      ...prev,
+      page: 1,
+      sort_by: sort_by as any,
+      sort_order
+    }));
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setQuery({
+      page: 1,
+      limit: 10,
+      sort_by: 'appointment_date',
+      sort_order: 'asc'
+    });
   };
 
   const calculateStats = (appointmentList: Appointment[]) => {
@@ -184,6 +226,7 @@ const AppointmentManagement: React.FC = () => {
       confirmed: 0,
       completed: 0,
       cancelled: 0,
+      in_progress: 0,
       today: 0
     } as AppointmentStats);
 
@@ -191,43 +234,78 @@ const AppointmentManagement: React.FC = () => {
   };
 
   const showNotification = (type: 'success' | 'error' | 'warning', message: string) => {
-    // Simple notification - có thể thay bằng toast library
-    const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-yellow-500';
-    
-    const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300`;
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-      notification.remove();
-    }, 3000);
+    // Simple notification - có thể thay thế bằng toast library
+    if (type === 'error') {
+      console.error(message);
+      // Có thể show toast notification ở đây
+    } else if (type === 'success') {
+      console.log(message);
+      // Có thể show toast notification ở đây
+    } else if (type === 'warning') {
+      console.warn(message);
+      // Có thể show toast notification ở đây
+    }
   };
 
   const handleConfirmAppointment = async (appointmentId: string) => {
+    setActionLoading(appointmentId);
     try {
-      setActionLoading(appointmentId);
-      const token = localStorage.getItem('gencare_auth_token');
-      
-      const response = await fetch(`http://localhost:3000/api/appointments/${appointmentId}/confirm`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Kiểm tra Google Access Token - BẮT BUỘC
+      let googleAccessToken;
+      try {
+        googleAccessToken = await getGoogleAccessToken();
+      } catch (error) {
+        console.error('Error getting Google Access Token:', error);
+        showNotification('error', 'Cần đăng nhập Google để tạo Google Meet link. Vui lòng đăng nhập Google trước.');
+        setActionLoading('');
+      return;
+    }
+    
+    if (!googleAccessToken) {
+        showNotification('error', 'Cần đăng nhập Google để tạo Google Meet link. Vui lòng đăng nhập Google trước.');
+        setActionLoading('');
+      return;
+    }
 
-      const data = await response.json();
+      const data = await appointmentService.confirmAppointment(appointmentId, googleAccessToken);
       
       if (data.success) {
-        showNotification('success', 'Xác nhận lịch hẹn thành công');
+        showNotification('success', 'Đã xác nhận lịch hẹn và tạo Google Meet thành công');
         fetchAppointments();
       } else {
-        showNotification('error', data.message || 'Không thể xác nhận lịch hẹn');
+        if ((data as any).requiresGoogleAuth) {
+          showNotification('error', 'Cần xác thực Google để tạo Google Meet link. Vui lòng đăng nhập Google.');
+        } else {
+          showNotification('error', data.message);
+        }
       }
-    } catch (err) {
-      showNotification('error', 'Có lỗi xảy ra khi xác nhận lịch hẹn');
+    } catch (err: any) {
+      console.error('Error confirming appointment:', err);
+      if (err.response?.status === 400 && err.response?.data?.requiresGoogleAuth) {
+        showNotification('error', 'Cần đăng nhập Google để tạo Google Meet link');
+      } else {
+        showNotification('error', err.message || 'Có lỗi xảy ra khi xác nhận lịch hẹn');
+      }
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleStartMeeting = async (appointmentId: string) => {
+      setActionLoading(appointmentId);
+    try {
+      const googleAccessToken = await getGoogleAccessToken();
+      const data = await appointmentService.startMeeting(appointmentId, googleAccessToken || undefined);
+      
+      if (data.success) {
+        showNotification('success', 'Cuộc họp đã được bắt đầu');
+        fetchAppointments();
+      } else {
+        showNotification('error', data.message);
+      }
+    } catch (err: any) {
+      console.error('Error starting meeting:', err);
+      showNotification('error', err.message || 'Có lỗi xảy ra khi bắt đầu cuộc họp');
     } finally {
       setActionLoading('');
     }
@@ -236,45 +314,21 @@ const AppointmentManagement: React.FC = () => {
   const handleCompleteAppointment = async () => {
     if (!selectedAppointment) return;
 
-    // Kiểm tra thời gian trước khi hoàn thành
-    if (!canCompleteAppointment(selectedAppointment)) {
-      const remainingTime = getRemainingTimeToComplete(selectedAppointment);
-      showNotification('warning', `Bạn chỉ có thể hoàn thành buổi tư vấn sau 1 giờ từ lúc bắt đầu. Còn lại ${remainingTime} phút.`);
-      return;
-    }
-
-    // Xác nhận trước khi hoàn thành
-    if (!confirm('Bạn có chắc chắn muốn hoàn thành buổi tư vấn này? Hành động này không thể hoàn tác.')) {
-      return;
-    }
-
-    try {
       setActionLoading(selectedAppointment._id);
-      const token = localStorage.getItem('gencare_auth_token');
-      
-      const response = await fetch(`http://localhost:3000/api/appointments/${selectedAppointment._id}/complete`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          consultant_notes: consultantNotes
-        })
-      });
-
-      const data = await response.json();
+    try {
+      const data = await appointmentService.completeAppointment(selectedAppointment._id, consultantNotes);
       
       if (data.success) {
-        showNotification('success', 'Hoàn thành buổi tư vấn thành công');
+        showNotification('success', 'Đã hoàn thành lịch hẹn');
         setSelectedAppointment(null);
         setConsultantNotes('');
         fetchAppointments();
       } else {
-        showNotification('error', data.message || 'Không thể hoàn thành buổi tư vấn');
+        showNotification('error', data.message);
       }
-    } catch (err) {
-      showNotification('error', 'Có lỗi xảy ra khi hoàn thành buổi tư vấn');
+    } catch (err: any) {
+      console.error('Error completing appointment:', err);
+      showNotification('error', err.message || 'Có lỗi xảy ra khi hoàn thành lịch hẹn');
     } finally {
       setActionLoading('');
     }
@@ -283,28 +337,19 @@ const AppointmentManagement: React.FC = () => {
   const handleCancelAppointment = async (appointmentId: string) => {
     if (!confirm('Bạn có chắc chắn muốn hủy lịch hẹn này?')) return;
 
-    try {
       setActionLoading(appointmentId);
-      const token = localStorage.getItem('gencare_auth_token');
-      
-      const response = await fetch(`http://localhost:3000/api/appointments/${appointmentId}/cancel`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const data = await response.json();
+    try {
+      const data = await appointmentService.cancelAppointment(appointmentId);
       
       if (data.success) {
-        showNotification('success', 'Hủy lịch hẹn thành công');
+        showNotification('success', 'Đã hủy lịch hẹn');
         fetchAppointments();
       } else {
-        showNotification('error', data.message || 'Không thể hủy lịch hẹn');
+        showNotification('error', data.message);
       }
-    } catch (err) {
-      showNotification('error', 'Có lỗi xảy ra khi hủy lịch hẹn');
+    } catch (err: any) {
+      console.error('Error cancelling appointment:', err);
+      showNotification('error', err.message || 'Có lỗi xảy ra khi hủy lịch hẹn');
     } finally {
       setActionLoading('');
     }
@@ -312,16 +357,83 @@ const AppointmentManagement: React.FC = () => {
 
   const formatDate = (dateString: string) => {
     const date = parseISO(dateString);
-    
     if (isToday(date)) return 'Hôm nay';
     if (isTomorrow(date)) return 'Ngày mai';
     if (isYesterday(date)) return 'Hôm qua';
-    
     return format(date, 'dd/MM/yyyy', { locale: vi });
   };
 
   const formatDateTime = (dateString: string) => {
     return format(parseISO(dateString), 'dd/MM/yyyy HH:mm', { locale: vi });
+  };
+
+  // Helper functions
+  const canCompleteAppointment = (appointment: Appointment) => {
+    return appointment.status === 'in_progress';
+  };
+
+  const getStatusMessage = (appointment: Appointment) => {
+    switch (appointment.status) {
+      case 'pending':
+        return 'Đang chờ chuyên gia xác nhận';
+      case 'confirmed':
+        return 'Đã xác nhận, sẵn sàng bắt đầu tư vấn';
+      case 'in_progress':
+        return 'Đang tư vấn';
+      case 'completed':
+        return 'Buổi tư vấn đã hoàn thành';
+      case 'cancelled':
+        return 'Lịch hẹn đã bị hủy';
+      default:
+        return 'Trạng thái không xác định';
+    }
+  };
+
+  const canTransitionTo = (currentStatus: string, targetStatus: string, userRole: string = 'consultant'): boolean => {
+    const baseTransitions: Record<string, string[]> = {
+      'pending': ['confirmed'],
+      'confirmed': ['in_progress'], 
+      'in_progress': ['completed'],
+      'completed': [],
+      'cancelled': []
+    };
+    
+     const cancelPermissions: Record<string, string[]> = {
+      'customer': ['pending', 'confirmed'],
+      'consultant': ['pending'],
+      'staff': ['pending', 'confirmed', 'in_progress'],
+      'admin': ['pending', 'confirmed', 'in_progress']
+     };
+    
+    if (targetStatus === 'cancelled') {
+      return cancelPermissions[userRole]?.includes(currentStatus) || false;
+    }
+    
+    return baseTransitions[currentStatus]?.includes(targetStatus) || false;
+  };
+
+  // Generate page numbers for pagination
+  const generatePageNumbers = (): number[] => {
+    const pages: number[] = [];
+    const current_page = pagination?.current_page || 1;
+    const total_pages = pagination?.total_pages || 1;
+    
+    if (total_pages <= 1) return pages;
+    
+    // Always show first page
+    pages.push(1);
+    
+    // Add pages around current page
+    for (let i = Math.max(2, current_page - 1); i <= Math.min(total_pages - 1, current_page + 1); i++) {
+      if (!pages.includes(i)) pages.push(i);
+    }
+    
+    // Always show last page
+    if (total_pages > 1 && !pages.includes(total_pages)) {
+      pages.push(total_pages);
+    }
+    
+    return pages;
   };
 
   const getAppointmentPriority = (appointment: Appointment) => {
@@ -333,97 +445,6 @@ const AppointmentManagement: React.FC = () => {
     if (diffHours < 24 && appointment.status === 'confirmed') return 'soon';
     if (appointment.status === 'pending') return 'pending';
     return 'normal';
-  };
-
-  // Kiểm tra xem có thể hoàn thành lịch hẹn không (sau 15 phút từ lúc bắt đầu)
-  const canCompleteAppointment = (appointment: Appointment) => {
-    if (appointment.status !== 'confirmed') return false;
-    
-    try {
-      // Kiểm tra dữ liệu đầu vào
-      if (!appointment.appointment_date || !appointment.start_time) {
-        console.warn('Missing appointment date or start time:', appointment);
-        return false;
-      }
-
-      // Parse ngày hẹn (format: YYYY-MM-DD)
-      const appointmentDate = new Date(appointment.appointment_date);
-      
-      // Parse giờ bắt đầu (format: HH:MM)
-      const [hours, minutes] = appointment.start_time.split(':').map(Number);
-      
-      // Kiểm tra giá trị hợp lệ
-      if (isNaN(appointmentDate.getTime()) || isNaN(hours) || isNaN(minutes)) {
-        console.warn('Invalid date or time format:', appointment.appointment_date, appointment.start_time);
-        return false;
-      }
-      
-      // Tạo datetime hoàn chỉnh
-      const appointmentDateTime = new Date(appointmentDate);
-      appointmentDateTime.setHours(hours, minutes, 0, 0);
-      
-      const now = new Date();
-      
-      // Tính số phút đã trôi qua kể từ lúc bắt đầu
-      const minutesPassed = (now.getTime() - appointmentDateTime.getTime()) / (1000 * 60);
-      
-      // Chỉ cho phép hoàn thành sau 15 phút
-      return minutesPassed >= 15;
-    } catch (error) {
-      console.error('Error checking completion time:', error, appointment);
-      return false;
-    }
-  };
-
-  // Tính thời gian còn lại để có thể hoàn thành (tính bằng phút)
-  const getRemainingTimeToComplete = (appointment: Appointment) => {
-    if (appointment.status !== 'confirmed') return 0;
-    
-    try {
-      // Kiểm tra dữ liệu đầu vào
-      if (!appointment.appointment_date || !appointment.start_time) {
-        console.warn('Missing appointment date or start time:', appointment);
-        return 0;
-      }
-
-      // Parse ngày hẹn (format: YYYY-MM-DD)
-      const appointmentDate = new Date(appointment.appointment_date);
-      
-      // Parse giờ bắt đầu (format: HH:MM)
-      const [hours, minutes] = appointment.start_time.split(':').map(Number);
-      
-      // Kiểm tra giá trị hợp lệ
-      if (isNaN(appointmentDate.getTime()) || isNaN(hours) || isNaN(minutes)) {
-        console.warn('Invalid date or time format:', appointment.appointment_date, appointment.start_time);
-        return 0;
-      }
-      
-      // Tạo datetime hoàn chỉnh
-      const appointmentDateTime = new Date(appointmentDate);
-      appointmentDateTime.setHours(hours, minutes, 0, 0);
-      
-      const now = new Date();
-      const minutesPassed = (now.getTime() - appointmentDateTime.getTime()) / (1000 * 60);
-      const remainingMinutes = 15 - minutesPassed;
-      
-      const result = Math.max(0, Math.ceil(remainingMinutes));
-      
-      // Kiểm tra kết quả hợp lệ
-      if (isNaN(result)) {
-        console.warn('Invalid calculation result:', result, {
-          appointmentDateTime: appointmentDateTime.toISOString(),
-          now: now.toISOString(),
-          minutesPassed,
-          remainingMinutes
-        });
-        return 0;
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('Error calculating remaining time:', error, appointment);
-      return 0;
-    }
   };
 
   const columns: TableColumn<Appointment>[] = [
@@ -463,13 +484,13 @@ const AppointmentManagement: React.FC = () => {
             <div className="text-sm whitespace-nowrap">{row.start_time} - {row.end_time}</div>
             {priority === 'urgent' && (
               <div className="text-xs text-red-500 font-semibold whitespace-nowrap">
-                <Icon name="⚠️" className="mr-1" />
+                <FaExclamationTriangle className="inline mr-1" />
                 Sắp diễn ra
               </div>
             )}
             {priority === 'soon' && (
               <div className="text-xs text-orange-500 whitespace-nowrap">
-                <Icon name="⏰" className="mr-1" />
+                <FaClock className="inline mr-1" />
                 Trong 24h
               </div>
             )}
@@ -483,13 +504,28 @@ const AppointmentManagement: React.FC = () => {
       name: 'Trạng thái',
       cell: (row) => (
         <div className="py-2">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap ${statusColors[row.status]}`}>
+          <span 
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap ${statusColors[row.status]} cursor-help`}
+            title={getStatusMessage(row)}
+          >
             {statusLabels[row.status]}
           </span>
+          {row.status === 'in_progress' && !canCompleteAppointment(row) && (
+            <div className="text-xs text-orange-600 mt-1 font-medium">
+              <FaHourglassHalf className="inline mr-1" />
+              Chờ hoàn thành
+            </div>
+          )}
+          {row.status === 'in_progress' && canCompleteAppointment(row) && (
+            <div className="text-xs text-green-600 mt-1 font-medium">
+              <FaCheckCircle className="inline mr-1" />
+              Sẵn sàng
+            </div>
+          )}
         </div>
       ),
       sortable: true,
-      width: '140px',
+      width: '160px',
     },
     {
       name: 'Ghi chú khách hàng',
@@ -526,7 +562,8 @@ const AppointmentManagement: React.FC = () => {
             className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 transition-colors whitespace-nowrap"
             title="Xem chi tiết"
           >
-            👁️ Chi tiết
+            <FaEye className="inline mr-1" />
+            Chi tiết
           </button>
           
           {row.status === 'pending' && (
@@ -537,15 +574,31 @@ const AppointmentManagement: React.FC = () => {
               title="Xác nhận lịch hẹn"
             >
               {actionLoading === row._id ? (
-                <Icon name="⏳" className="mr-1" />
+                <FaSpinner className="animate-spin inline mr-1" />
               ) : (
-                <Icon name="✅" className="mr-1" />
+                <FaCheck className="inline mr-1" />
               )}
               Xác nhận
             </button>
           )}
           
           {row.status === 'confirmed' && (
+            <button
+              onClick={() => handleStartMeeting(row._id)}
+              disabled={actionLoading === row._id}
+              className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors whitespace-nowrap flex items-center"
+              title="Bắt đầu buổi tư vấn"
+            >
+              {actionLoading === row._id ? (
+                <FaSpinner className="animate-spin inline mr-1" />
+              ) : (
+                <FaPlay className="inline mr-1" />
+              )}
+              Bắt đầu
+            </button>
+          )}
+          
+          {row.status === 'in_progress' && (
             <button
               onClick={() => {
                 setSelectedAppointment(row);
@@ -554,20 +607,22 @@ const AppointmentManagement: React.FC = () => {
               className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors whitespace-nowrap"
               title="Hoàn thành buổi tư vấn"
             >
-              ✅ Hoàn thành
+              <FaCheckCircle className="inline mr-1" />
+              Hoàn thành
             </button>
           )}
           
-          {(row.status === 'pending' || row.status === 'confirmed') && (
+          {canTransitionTo(row.status, 'cancelled', 'consultant') && (
             <button
               onClick={() => handleCancelAppointment(row._id)}
               disabled={actionLoading === row._id}
               className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors flex items-center"
+              title={`Hủy lịch hẹn (Chỉ được phép hủy lúc pending)`}
             >
               {actionLoading === row._id ? (
-                <Icon name="⏳" className="mr-1" />
+                <FaSpinner className="animate-spin inline mr-1" />
               ) : (
-                <Icon name="❌" className="mr-1" />
+                <FaTimes className="inline mr-1" />
               )}
               Hủy
             </button>
@@ -635,326 +690,385 @@ const AppointmentManagement: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Đang tải danh sách lịch hẹn...</p>
+          <FaSpinner className="animate-spin text-4xl text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Đang tải lịch hẹn...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
-      <div className="max-w-full mx-auto">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-6 lg:mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Quản lý Lịch Tư vấn</h1>
-              <p className="mt-2 text-gray-600 text-sm lg:text-base">
-                Xin chào <span className="font-semibold">{user?.full_name}</span>, 
-                quản lý lịch hẹn tư vấn của bạn tại đây.
-              </p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Quản lý lịch hẹn</h1>
+            <p className="text-gray-600">Quản lý các cuộc hẹn tư vấn của bạn</p>
             </div>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={fetchAppointments}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-              >
-                <Icon name="🔄" className="mr-2" />
-                Làm mới
-              </button>
+          <div className="mt-4 sm:mt-0">
+            <GoogleAuthStatus />
             </div>
           </div>
         </div>
 
-        {/* Auto Confirm Status */}
-        <div className="mb-6">
-          <AutoConfirmStatus />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center">
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <FaCalendarAlt className="w-6 h-6 text-blue-600" />
+              </div>
+            <div className="ml-4">
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-gray-600">Tổng lịch hẹn</p>
+            </div>
+          </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-500">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Tổng lịch hẹn</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center">
+            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <FaHourglassHalf className="w-6 h-6 text-yellow-600" />
               </div>
-              <div className="text-blue-500 text-2xl">
-                <Icon name="📅" size={32} />
+            <div className="ml-4">
+              <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
+              <p className="text-gray-600">Chờ xác nhận</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center">
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <FaCheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            <div className="ml-4">
+              <p className="text-2xl font-bold text-gray-900">{stats.confirmed}</p>
+              <p className="text-gray-600">Đã xác nhận</p>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-yellow-500">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Chờ xác nhận</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <FaClock className="w-6 h-6 text-purple-600" />
               </div>
-              <div className="text-yellow-500 text-2xl">
-                <Icon name="⏳" size={32} />
+            <div className="ml-4">
+              <p className="text-2xl font-bold text-gray-900">{stats.today}</p>
+              <p className="text-gray-600">Hôm nay</p>
+            </div>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-500">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Đã xác nhận</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.confirmed}</p>
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          {/* Search */}
+          <div className="lg:col-span-5">
+            <div className="relative">
+              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm theo tên khách hàng, ghi chú..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {searchTerm !== query.search && (
+                <FaSpinner className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 animate-spin" />
+              )}
               </div>
-              <div className="text-blue-500 text-2xl">
-                <Icon name="✅" size={32} />
               </div>
+
+          {/* Status Filter */}
+          <div className="lg:col-span-3">
+            <select
+              value={query.status || 'all'}
+              onChange={(e) => handleStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Tất cả trạng thái</option>
+              <option value="pending">Chờ xác nhận</option>
+              <option value="confirmed">Đã xác nhận</option>
+              <option value="in_progress">Đang tư vấn</option>
+              <option value="completed">Đã hoàn thành</option>
+              <option value="cancelled">Đã hủy</option>
+            </select>
             </div>
+
+          {/* Sort */}
+          <div className="lg:col-span-3">
+            <select
+              value={`${query.sort_by}_${query.sort_order}`}
+              onChange={(e) => {
+                const [sort_by, sort_order] = e.target.value.split('_');
+                handleSortChange(sort_by, sort_order as 'asc' | 'desc');
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="appointment_date_asc">Ngày hẹn gần nhất</option>
+              <option value="appointment_date_desc">Ngày hẹn xa nhất</option>
+              <option value="created_date_desc">Tạo mới nhất</option>
+              <option value="created_date_asc">Tạo cũ nhất</option>
+            </select>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-500">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Đã hoàn thành</p>
-                <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
+          {/* Clear Filters */}
+          <div className="lg:col-span-1">
+            <button
+              onClick={handleClearFilters}
+              className="w-full px-3 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Xóa bộ lọc"
+            >
+              <FaFilter className="w-4 h-4 mx-auto" />
+            </button>
               </div>
-              <div className="text-green-500 text-2xl">🎉</div>
+              </div>
             </div>
+
+      {/* Appointments List */}
+      {appointments.length > 0 ? (
+        <>
+          <div className="space-y-6 mb-8">
+            {appointments.map((appointment) => (
+              <div key={appointment._id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-4 mb-3">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {appointment.customer_id?.full_name || 'Khách hàng'}
+                      </h3>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[appointment.status]}`}>
+                        {statusLabels[appointment.status]}
+                      </span>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-orange-500">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Hôm nay</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.today}</p>
-              </div>
-              <div className="text-orange-500 text-2xl">📍</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-wrap gap-2">
-            {filterOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setFilter(option.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filter === option.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {option.label} ({option.count})
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Appointments Table */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <DataTable
-              columns={columns}
-              data={appointments}
-              pagination
-              paginationPerPage={10}
-              paginationRowsPerPageOptions={[10, 20, 50]}
-              highlightOnHover
-              pointerOnHover
-              customStyles={customStyles}
-              responsive={false}
-              fixedHeader={true}
-              fixedHeaderScrollHeight="600px"
-              noDataComponent={
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">
-                    <Icon name="📅" size={64} className="mx-auto" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Không có lịch hẹn nào</h3>
-                  <p className="text-gray-500">
-                    {filter === 'all' 
-                      ? 'Chưa có lịch hẹn nào được tạo.'
-                      : `Không có lịch hẹn nào với trạng thái "${filterOptions.find(f => f.value === filter)?.label}".`
-                    }
-                  </p>
-                </div>
-              }
-            />
-          </div>
-        </div>
-
-        {/* Appointment Detail Modal */}
-        {selectedAppointment && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Chi tiết Lịch hẹn</h2>
-                  <button
-                    onClick={() => {
-                      setSelectedAppointment(null);
-                      setConsultantNotes('');
-                    }}
-                    className="text-gray-400 hover:text-gray-600 text-2xl"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div className="space-y-6">
-                  {/* Customer Info */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">Thông tin Khách hàng</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm text-gray-600">Họ tên:</label>
-                        <p className="font-medium">
-                          {selectedAppointment.customer_id?.full_name || 'Không có thông tin'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-600">Email:</label>
-                        <p className="font-medium">
-                          {selectedAppointment.customer_id?.email || 'Không có email'}
-                        </p>
-                      </div>
-                      {selectedAppointment.customer_id?.phone && (
-                        <div>
-                          <label className="text-sm text-gray-600">Điện thoại:</label>
-                          <p className="font-medium">{selectedAppointment.customer_id.phone}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Appointment Info */}
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">Thông tin Lịch hẹn</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm text-gray-600">Ngày hẹn:</label>
-                        <p className="font-medium">{formatDate(selectedAppointment.appointment_date)}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-600">Thời gian:</label>
-                        <p className="font-medium">{selectedAppointment.start_time} - {selectedAppointment.end_time}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-600">Trạng thái:</label>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[selectedAppointment.status]}`}>
-                          {statusLabels[selectedAppointment.status]}
+                        <FaCalendarAlt className="w-4 h-4 mr-2" />
+                        <span>
+                          {formatDate(appointment.appointment_date)} • {appointment.start_time} - {appointment.end_time}
                         </span>
-                      </div>
+              </div>
                       <div>
-                        <label className="text-sm text-gray-600">Ngày tạo:</label>
-                        <p className="font-medium">{formatDateTime(selectedAppointment.created_date)}</p>
-                      </div>
-                    </div>
-                  </div>
+                        <span className="font-medium">Email:</span> {appointment.customer_id?.email || 'N/A'}
+                </div>
+            </div>
 
-                  {/* Customer Notes */}
-                  {selectedAppointment.customer_notes && (
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-2">Ghi chú từ Khách hàng</h3>
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <p className="text-gray-700">{selectedAppointment.customer_notes}</p>
-                      </div>
-                    </div>
-                  )}
+                    {appointment.customer_notes && (
+                      <div className="mt-3 text-sm text-gray-600">
+                        <span className="font-medium">Ghi chú từ khách hàng:</span> {appointment.customer_notes}
+          </div>
+                    )}
 
-                  {/* Completion Time Warning */}
-                  {selectedAppointment.status === 'confirmed' && !canCompleteAppointment(selectedAppointment) && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <Icon name="⏰" className="text-yellow-600 mr-2" />
-                        <div>
-                          <h4 className="font-semibold text-yellow-800">Chờ để hoàn thành</h4>
-                          <p className="text-sm text-yellow-700">
-                            Bạn chỉ có thể hoàn thành buổi tư vấn sau 1 giờ từ lúc bắt đầu. 
-                            Còn lại <strong>{getRemainingTimeToComplete(selectedAppointment)} phút</strong>.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    {appointment.consultant_notes && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        <span className="font-medium">Ghi chú của bạn:</span> {appointment.consultant_notes}
+              </div>
+                    )}
+              </div>
 
-                  {/* Consultant Notes */}
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Ghi chú của Chuyên gia</h3>
-                    <textarea
-                      value={consultantNotes}
-                      onChange={(e) => setConsultantNotes(e.target.value)}
-                      placeholder="Nhập ghi chú về buổi tư vấn, kết quả, khuyến nghị..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      rows={4}
-                      disabled={selectedAppointment.status === 'completed' || selectedAppointment.status === 'cancelled'}
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      {consultantNotes.length}/500 ký tự
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 pt-4 border-t">
+                  <div className="flex flex-col gap-2 ml-4">
                     <button
-                      onClick={() => {
-                        setSelectedAppointment(null);
-                        setConsultantNotes('');
-                      }}
-                      className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                      onClick={() => setSelectedAppointment(appointment)}
+                      className="px-3 py-1 text-blue-600 hover:text-blue-800 text-sm font-medium"
                     >
-                      Đóng
+                      Chi tiết
                     </button>
                     
-                    {selectedAppointment.status === 'pending' && (
+                    {appointment.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => handleConfirmAppointment(appointment._id)}
+                          disabled={actionLoading === appointment._id}
+                          className="px-3 py-1 text-green-600 hover:text-green-800 text-sm font-medium disabled:opacity-50"
+                        >
+                          {actionLoading === appointment._id ? 'Đang xử lý...' : 'Xác nhận'}
+                        </button>
+                        <button
+                          onClick={() => handleCancelAppointment(appointment._id)}
+                          disabled={actionLoading === appointment._id}
+                          className="px-3 py-1 text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                        >
+                          Hủy
+                        </button>
+                      </>
+                    )}
+
+                    {appointment.status === 'confirmed' && (
                       <button
-                        onClick={() => handleConfirmAppointment(selectedAppointment._id)}
-                        disabled={actionLoading === selectedAppointment._id}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        onClick={() => handleStartMeeting(appointment._id)}
+                        disabled={actionLoading === appointment._id}
+                        className="px-3 py-1 text-purple-600 hover:text-purple-800 text-sm font-medium disabled:opacity-50"
                       >
-                        {actionLoading === selectedAppointment._id ? 'Đang xử lý...' : '✅ Xác nhận'}
+                        {actionLoading === appointment._id ? 'Đang xử lý...' : 'Bắt đầu'}
                       </button>
                     )}
-                    
-                    {selectedAppointment.status === 'confirmed' && (
-                      <button
-                        onClick={handleCompleteAppointment}
-                        disabled={actionLoading === selectedAppointment._id || !canCompleteAppointment(selectedAppointment)}
-                        className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-                          canCompleteAppointment(selectedAppointment)
-                            ? 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                        title={
-                          canCompleteAppointment(selectedAppointment)
-                            ? 'Hoàn thành buổi tư vấn'
-                            : `Chỉ có thể hoàn thành sau 1 giờ tư vấn (còn ${getRemainingTimeToComplete(selectedAppointment)} phút)`
-                        }
-                      >
-                        {actionLoading === selectedAppointment._id ? 'Đang xử lý...' : '🎉 Hoàn thành'}
-                      </button>
-                    )}
-                    
-                    {(selectedAppointment.status === 'pending' || selectedAppointment.status === 'confirmed') && (
-                      <button
-                        onClick={() => handleCancelAppointment(selectedAppointment._id)}
-                        disabled={actionLoading === selectedAppointment._id}
-                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-                      >
-                        {actionLoading === selectedAppointment._id ? 'Đang xử lý...' : '❌ Hủy'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
+              </div>
+            ))}
+        </div>
+
+          {/* Pagination */}
+          {pagination?.total_pages && pagination.total_pages > 1 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Hiển thị <span className="font-medium">{((pagination.current_page || 1) - 1) * (pagination.items_per_page || 10) + 1}</span> - <span className="font-medium">{Math.min((pagination.current_page || 1) * (pagination.items_per_page || 10), pagination.total_items || 0)}</span> trong tổng số <span className="font-medium">{pagination.total_items || 0}</span> lịch hẹn
+                </p>
+                
+                <div className="flex items-center space-x-1">
+              <button
+                    onClick={() => handlePageChange((pagination.current_page || 1) - 1)}
+                    disabled={!pagination?.has_prev}
+                    className="flex items-center px-3 py-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    <FaChevronLeft className="w-4 h-4 mr-1" />
+                    Trước
+                  </button>
+
+                  {generatePageNumbers().map((page: number, index: number, array: number[]) => (
+                    <React.Fragment key={page}>
+                      {index > 0 && array[index - 1] < page - 1 && (
+                        <span className="px-2 text-gray-400">...</span>
+                      )}
+                      <button
+                        onClick={() => handlePageChange(page)}
+                        className={`px-3 py-2 rounded-md font-medium transition-colors ${
+                          page === (pagination.current_page || 1)
+                    ? 'bg-blue-600 text-white'
+                            : 'text-gray-600 hover:bg-gray-100 border border-gray-300'
+                }`}
+              >
+                        {page}
+              </button>
+                    </React.Fragment>
+            ))}
+
+                  <button
+                    onClick={() => handlePageChange((pagination.current_page || 1) + 1)}
+                    disabled={!pagination?.has_next}
+                    className="flex items-center px-3 py-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Sau
+                    <FaChevronRight className="w-4 h-4 ml-1" />
+                  </button>
+          </div>
+        </div>
+            </div>
+          )}
+        </>
+      ) : !loading && (
+                <div className="text-center py-12">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FaCalendarAlt className="w-8 h-8 text-gray-400" />
+                  </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Chưa có lịch hẹn nào
+          </h3>
+          <p className="text-gray-600 mb-6">
+            {query.search || query.status 
+              ? 'Không tìm thấy lịch hẹn nào phù hợp với bộ lọc.'
+              : 'Bạn chưa có lịch hẹn nào từ khách hàng.'
+                    }
+                  </p>
+          {(query.search || query.status) && (
+            <button
+              onClick={handleClearFilters}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Xóa bộ lọc
+            </button>
+          )}
+                </div>
+      )}
+
+      {/* Detail Modal */}
+      {selectedAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">Chi tiết lịch hẹn</h3>
+              <button 
+                onClick={() => setSelectedAppointment(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+          </div>
+            
+            <div className="space-y-3">
+              <div>
+                <span className="font-medium text-gray-700">Khách hàng:</span>
+                <p className="text-gray-900">{selectedAppointment.customer_id?.full_name || 'N/A'}</p>
+        </div>
+
+              <div>
+                <span className="font-medium text-gray-700">Email:</span>
+                <p className="text-gray-900">{selectedAppointment.customer_id?.email || 'N/A'}</p>
+              </div>
+              
+              <div>
+                <span className="font-medium text-gray-700">Ngày giờ:</span>
+                <p className="text-gray-900">
+                  {formatDate(selectedAppointment.appointment_date)} • {selectedAppointment.start_time} - {selectedAppointment.end_time}
+                </p>
+              </div>
+              
+              <div>
+                <span className="font-medium text-gray-700">Trạng thái:</span>
+                <span className={`ml-2 px-2 py-1 rounded-full text-sm ${statusColors[selectedAppointment.status]}`}>
+                  {statusLabels[selectedAppointment.status]}
+                </span>
+              </div>
+              
+              {selectedAppointment.customer_notes && (
+                <div>
+                  <span className="font-medium text-gray-700">Ghi chú từ khách hàng:</span>
+                  <p className="text-gray-900">{selectedAppointment.customer_notes}</p>
+                </div>
+              )}
+              
+              {selectedAppointment.consultant_notes && (
+                <div>
+                  <span className="font-medium text-gray-700">Ghi chú của bạn:</span>
+                  <p className="text-gray-900">{selectedAppointment.consultant_notes}</p>
+                </div>
+              )}
+            </div>
+
+            {selectedAppointment.status === 'in_progress' && (
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ghi chú hoàn thành:
+                </label>
+                <textarea
+                  value={consultantNotes}
+                  onChange={(e) => setConsultantNotes(e.target.value)}
+                  placeholder="Nhập ghi chú về cuộc tư vấn..."
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  onClick={handleCompleteAppointment}
+                  disabled={actionLoading === selectedAppointment._id}
+                  className="mt-3 w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {actionLoading === selectedAppointment._id ? 'Đang xử lý...' : 'Hoàn thành lịch hẹn'}
+                </button>
+              </div>
         )}
       </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default AppointmentManagement; 
+export default AppointmentManagement;

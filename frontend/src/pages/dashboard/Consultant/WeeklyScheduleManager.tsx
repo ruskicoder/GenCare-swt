@@ -4,7 +4,10 @@ import { vi } from 'date-fns/locale';
 import { useAuth } from '../../../contexts/AuthContext';
 import { weeklyScheduleService } from '../../../services/weeklyScheduleService';
 import { appointmentService } from '../../../services/appointmentService';
-import Icon from '../../../components/icons/IconMapping';
+import { getGoogleAccessToken } from '../../../utils/authUtils';
+import GoogleAuthStatus from '../../../components/common/GoogleAuthStatus';
+import { FaChevronLeft, FaChevronRight, FaLink } from 'react-icons/fa';
+
 
 interface WorkingDay {
   start_time: string;
@@ -59,7 +62,7 @@ interface Appointment {
   appointment_date: string;
   start_time: string;
   end_time: string;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'in_progress';
   customer_id: {
     _id: string;
     full_name: string;
@@ -76,6 +79,11 @@ interface Appointment {
   customer_notes?: string;
   consultant_notes?: string;
   created_date: string;
+  meeting_info?: {
+    meet_url: string;
+    meeting_id: string;
+    meeting_password?: string;
+  } | null;
 }
 
 const WeeklyScheduleManager: React.FC = () => {
@@ -125,6 +133,12 @@ const WeeklyScheduleManager: React.FC = () => {
           hover: 'hover:bg-red-600',
           cellBg: 'bg-red-50'
         };
+      case 'in_progress':
+        return {
+          bg: 'bg-purple-500',
+          hover: 'hover:bg-purple-600',
+          cellBg: 'bg-purple-50'
+        };
       default:
         return {
           bg: 'bg-gray-500',
@@ -140,6 +154,7 @@ const WeeklyScheduleManager: React.FC = () => {
       case 'confirmed': return 'Đã xác nhận';
       case 'completed': return 'Hoàn thành';
       case 'cancelled': return 'Đã hủy';
+      case 'in_progress': return 'Đang tư vấn';
       default: return status;
     }
   };
@@ -149,7 +164,6 @@ const WeeklyScheduleManager: React.FC = () => {
   const canEdit = user?.role === 'staff' || user?.role === 'admin';
 
   useEffect(() => {
-    console.log('🔍 Fetching schedule for week:', format(currentWeek, 'yyyy-MM-dd (EEEE)', { locale: vi }));
     fetchWeekData();
   }, [currentWeek]);
 
@@ -170,7 +184,7 @@ const WeeklyScheduleManager: React.FC = () => {
         fetchAppointmentsForWeek()
       ]);
     } catch (error) {
-      console.error('Error fetching week data:', error);
+      // Error handled by individual fetch functions
     } finally {
       setLoading(false);
     }
@@ -183,8 +197,6 @@ const WeeklyScheduleManager: React.FC = () => {
       // Sử dụng weeklyScheduleService thay vì fetch trực tiếp
       const response = await weeklyScheduleService.getMySchedules(weekStartDate, weekStartDate);
       
-      console.log('📊 Backend response for my-schedules:', response);
-      
       if (response.success && response.data && response.data.schedules && response.data.schedules.length > 0) {
         // Filter schedules for the exact week we're looking for
         const targetWeekStart = format(currentWeek, 'yyyy-MM-dd');
@@ -194,7 +206,6 @@ const WeeklyScheduleManager: React.FC = () => {
         });
 
         if (matchingSchedule) {
-          console.log('📅 Schedule found for this week:', matchingSchedule);
           setExistingSchedule(matchingSchedule);
           setScheduleData({
             working_days: matchingSchedule.working_days || {},
@@ -202,7 +213,6 @@ const WeeklyScheduleManager: React.FC = () => {
             notes: matchingSchedule.notes || ''
           });
         } else {
-          console.log('📅 No schedule found for this specific week');
           setExistingSchedule(null);
           setScheduleData({
             working_days: {},
@@ -211,7 +221,6 @@ const WeeklyScheduleManager: React.FC = () => {
           });
         }
       } else {
-        console.log('📅 No schedules data from backend');
         // Reset to default if no schedule exists
         setExistingSchedule(null);
         setScheduleData({
@@ -221,7 +230,6 @@ const WeeklyScheduleManager: React.FC = () => {
         });
       }
     } catch (err) {
-      console.error('Error fetching schedule:', err);
       setMessage({ type: 'error', text: 'Có lỗi xảy ra khi tải lịch làm việc' });
     }
   };
@@ -231,28 +239,20 @@ const WeeklyScheduleManager: React.FC = () => {
       const weekStart = format(currentWeek, 'yyyy-MM-dd');
       const weekEnd = format(addDays(currentWeek, 6), 'yyyy-MM-dd');
       
-      console.log('📅 Fetching appointments for week:', weekStart, 'to', weekEnd);
-      
-      const data = await appointmentService.getConsultantAppointments(undefined, weekStart, weekEnd);
-      console.log('📊 Appointments Response data:', data);
+      const data = await appointmentService.getConsultantAppointments();
       
       if (data.success && data.data) {
-        console.log('✅ Found appointments:', data.data.appointments?.length || 0);
-        
-        // Debug: log each appointment to check structure
-        data.data.appointments?.forEach((appointment: Appointment, index: number) => {
-          console.log(`📄 Appointment ${index + 1}:`, appointment);
-          console.log(`👤 Customer ID:`, appointment.customer_id);
-          console.log(`📛 Customer Name:`, appointment.customer_id?.full_name);
+        // Filter appointments for current week
+        const weekAppointments = (data.data.appointments || []).filter((appointment: Appointment) => {
+          const appointmentDate = appointment.appointment_date;
+          return appointmentDate >= weekStart && appointmentDate <= weekEnd;
         });
         
-        setAppointments(data.data.appointments || []);
+        setAppointments(weekAppointments);
       } else {
-        console.log('ℹ️ No appointments found for this week');
         setAppointments([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching appointments:', error);
       setAppointments([]);
     }
   };
@@ -318,9 +318,7 @@ const WeeklyScheduleManager: React.FC = () => {
         notes: scheduleData.notes
       };
 
-      console.log('📤 Sending request data:', requestData);
-      console.log('🗓️ Current week (should be Monday):', format(currentWeek, 'yyyy-MM-dd (EEEE)', { locale: vi }));
-      console.log('📅 Calculated Monday:', format(monday, 'yyyy-MM-dd (EEEE)', { locale: vi }));
+
 
       let response;
       if (existingSchedule) {
@@ -331,7 +329,7 @@ const WeeklyScheduleManager: React.FC = () => {
         response = await weeklyScheduleService.createSchedule(requestData);
       }
 
-      console.log('📨 Save response:', response);
+
       
       if (response.success) {
         setMessage({ type: 'success', text: existingSchedule ? 'Cập nhật lịch thành công!' : 'Tạo lịch thành công!' });
@@ -340,7 +338,6 @@ const WeeklyScheduleManager: React.FC = () => {
         setMessage({ type: 'error', text: response.message || 'Có lỗi xảy ra khi lưu lịch' });
       }
     } catch (err) {
-      console.error('Error saving schedule:', err);
       setMessage({ type: 'error', text: 'Có lỗi xảy ra khi lưu lịch' });
     } finally {
       setSaving(false);
@@ -363,7 +360,6 @@ const WeeklyScheduleManager: React.FC = () => {
         setMessage({ type: 'error', text: response.message || 'Có lỗi xảy ra khi sao chép lịch' });
       }
     } catch (err) {
-      console.error('Error copying schedule:', err);
       setMessage({ type: 'error', text: 'Có lỗi xảy ra khi sao chép lịch' });
     } finally {
       setSaving(false);
@@ -378,32 +374,62 @@ const WeeklyScheduleManager: React.FC = () => {
     setCurrentWeek(prev => addWeeks(prev, 1));
   };
 
-  const handleAppointmentAction = async (appointmentId: string, action: 'confirm' | 'cancel') => {
+  const handleAppointmentAction = async (
+    appointmentId: string,
+    action: 'confirm' | 'cancel' | 'start' | 'complete'
+  ) => {
     try {
-      console.log(`${action} appointment:`, appointmentId);
-      
-      let response;
+      // Kiểm tra Google access token cho action confirm
       if (action === 'confirm') {
-        response = await appointmentService.confirmAppointment(appointmentId);
-      } else {
-        response = await appointmentService.cancelAppointment(appointmentId);
+        const googleAccessToken = getGoogleAccessToken();
+        if (!googleAccessToken) {
+          setMessage({ 
+            type: 'error', 
+            text: 'Cần đăng nhập Google để tạo link Google Meet. Vui lòng đăng nhập lại.' 
+          });
+          // Redirect đến Google OAuth
+          window.location.href = 'http://localhost:3000/api/auth/google';
+          return;
+        }
+      }
+
+      let response;
+      switch (action) {
+        case 'confirm':
+          const googleAccessToken = getGoogleAccessToken();
+          response = await appointmentService.confirmAppointment(appointmentId, googleAccessToken!);
+          break;
+        case 'cancel':
+          response = await appointmentService.cancelAppointment(appointmentId);
+          break;
+        case 'start':
+          const googleTokenForStart = getGoogleAccessToken();
+          response = await appointmentService.startMeeting(appointmentId, googleTokenForStart || undefined);
+          break;
+        case 'complete':
+          response = await appointmentService.completeAppointment(appointmentId, ''); // No notes in quick modal
+          break;
+        default:
+          return;
       }
 
       if (response.success) {
-        setMessage({ 
-          type: 'success', 
-          text: action === 'confirm' ? 'Đã chấp nhận cuộc hẹn' : 'Đã từ chối cuộc hẹn' 
-        });
-        
+        const successMsg = {
+          confirm: 'Đã chấp nhận cuộc hẹn và tạo link Google Meet thành công',
+          cancel: 'Đã hủy cuộc hẹn',
+          start: 'Đã bắt đầu buổi tư vấn',
+          complete: 'Đã hoàn thành buổi tư vấn'
+        }[action];
+
+        setMessage({ type: 'success', text: successMsg });
+
         // Refresh appointments
         fetchAppointmentsForWeek();
         setHoveredAppointment(null);
-      } else {
+            } else {
         setMessage({ type: 'error', text: response.message || 'Có lỗi xảy ra khi cập nhật cuộc hẹn' });
       }
-    } catch (error) {
-      console.error('Error updating appointment:', error);
-      setMessage({ type: 'error', text: 'Có lỗi xảy ra khi cập nhật cuộc hẹn' });
+    } catch (error) {       setMessage({ type: 'error', text: 'Có lỗi xảy ra khi cập nhật cuộc hẹn' });
     }
   };
 
@@ -448,6 +474,75 @@ const WeeklyScheduleManager: React.FC = () => {
     }
   };
 
+  // Kiểm tra xem có thể hoàn thành lịch hẹn hay không (giống logic ở AppointmentManagement)
+  const canCompleteAppointment = (appointment: Appointment) => {
+    if (appointment.status !== 'in_progress') return false;
+
+    try {
+      if (!appointment.appointment_date || !appointment.start_time) return false;
+
+      const now = new Date();
+      const appointmentDate = new Date(appointment.appointment_date);
+      const [hours, minutes] = appointment.start_time.split(':').map(Number);
+
+      const appointmentDateOnly = new Date(appointmentDate);
+      appointmentDateOnly.setHours(0, 0, 0, 0);
+
+      const todayOnly = new Date(now);
+      todayOnly.setHours(0, 0, 0, 0);
+
+      if (todayOnly.getTime() < appointmentDateOnly.getTime()) return false; // chưa tới ngày hẹn
+
+      const oneDayAfter = new Date(appointmentDateOnly);
+      oneDayAfter.setDate(oneDayAfter.getDate() + 1);
+      if (todayOnly.getTime() > oneDayAfter.getTime()) return false; // quá 1 ngày
+
+      if (isNaN(hours) || isNaN(minutes)) return false;
+
+      const appointmentDateTime = new Date(appointmentDate);
+      appointmentDateTime.setHours(hours, minutes, 0, 0);
+
+      if (now.getTime() < appointmentDateTime.getTime()) return false; // chưa đến giờ bắt đầu
+
+      const minutesPassed = (now.getTime() - appointmentDateTime.getTime()) / (1000 * 60);
+      return minutesPassed >= 15;
+    } catch {
+      return false;
+    }
+  };
+
+  const getCompletionBlockedReason = (appointment: Appointment) => {
+    if (appointment.status !== 'in_progress') return 'Chỉ hoàn thành khi đang tư vấn';
+
+    try {
+      const now = new Date();
+      const appointmentDate = new Date(appointment.appointment_date);
+      const [hours, minutes] = appointment.start_time.split(':').map(Number);
+
+      const appointmentDateOnly = new Date(appointmentDate);
+      appointmentDateOnly.setHours(0, 0, 0, 0);
+
+      const todayOnly = new Date(now);
+      todayOnly.setHours(0, 0, 0, 0);
+
+      if (todayOnly.getTime() < appointmentDateOnly.getTime()) return 'Chưa đến ngày hẹn';
+      const oneDayAfter = new Date(appointmentDateOnly);
+      oneDayAfter.setDate(oneDayAfter.getDate() + 1);
+      if (todayOnly.getTime() > oneDayAfter.getTime()) return 'Quá hạn (sau 1 ngày)';
+
+      const appointmentDateTime = new Date(appointmentDate);
+      appointmentDateTime.setHours(hours, minutes, 0, 0);
+      if (now.getTime() < appointmentDateTime.getTime()) return 'Chưa đến giờ bắt đầu';
+
+      const minutesPassed = (now.getTime() - appointmentDateTime.getTime()) / (1000 * 60);
+      if (minutesPassed < 15) return `Cần chờ thêm ${Math.ceil(15 - minutesPassed)} phút`;
+
+      return '';
+    } catch {
+      return 'Không xác định';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -472,6 +567,21 @@ const WeeklyScheduleManager: React.FC = () => {
           </div>
         )}
 
+        {/* Google Auth Status for Consultant */}
+        {isConsultant && (
+          <div className="bg-white rounded-lg shadow-sm p-4 mb-4 border border-blue-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-700">Trạng thái Google:</span>
+                <GoogleAuthStatus showButton={true} />
+              </div>
+              <div className="text-xs text-gray-500">
+                Cần kết nối Google để tạo link Google Meet khi xác nhận lịch hẹn
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Calendar View for Consultant or Schedule Form for Staff */}
         {isConsultant ? (
           /* Calendar View for Consultant (Read-only) */
@@ -486,7 +596,7 @@ const WeeklyScheduleManager: React.FC = () => {
                   className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm"
                   disabled={loading}
                 >
-                  <Icon name="←" className="mr-2" />
+                  <FaChevronLeft className="mr-2" />
                   Tuần trước
                 </button>
                 
@@ -513,7 +623,7 @@ const WeeklyScheduleManager: React.FC = () => {
                   disabled={loading}
                 >
                   Tuần sau
-                  <Icon name="→" className="ml-2" />
+                  <FaChevronRight className="ml-2" />
                 </button>
               </div>
             </div>
@@ -577,6 +687,7 @@ const WeeklyScheduleManager: React.FC = () => {
                                 
                                 // Get appointments for this specific day and hour
                                 const dayAppointments = appointments.filter(appointment => {
+                                  if (appointment.status === 'cancelled') return false; // Bỏ qua lịch đã hủy
                                   const appointmentDate = parseISO(appointment.appointment_date);
                                   const appointmentHour = parseInt(appointment.start_time.split(':')[0]);
                                   return isSameDay(appointmentDate, dayDate) && appointmentHour === hour;
@@ -797,6 +908,21 @@ const WeeklyScheduleManager: React.FC = () => {
                       {hoveredAppointment.start_time} - {hoveredAppointment.end_time}
                     </span>
                   </div>
+
+                  {/* Google Meet Link */}
+                  {hoveredAppointment.status === 'in_progress' && hoveredAppointment.meeting_info?.meet_url && (
+                    <div className="flex items-center space-x-2 mt-2">
+                      <FaLink className="text-green-600" />
+                      <a
+                        href={hoveredAppointment.meeting_info.meet_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        Tham gia buổi tư vấn (Meet)
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 {/* Customer Notes */}
@@ -810,20 +936,56 @@ const WeeklyScheduleManager: React.FC = () => {
                 )}
 
                 {/* Action Buttons */}
-                {hoveredAppointment.status === 'pending' && (
+                {(hoveredAppointment.status === 'pending' || hoveredAppointment.status === 'confirmed' || hoveredAppointment.status === 'in_progress') && (
                   <div className="flex space-x-2 pt-3 border-t">
-                    <button
-                      onClick={() => handleAppointmentAction(hoveredAppointment._id, 'confirm')}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
-                    >
-                      Chấp nhận
-                    </button>
-                    <button
-                      onClick={() => handleAppointmentAction(hoveredAppointment._id, 'cancel')}
-                      className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
-                    >
-                      Từ chối
-                    </button>
+                    {hoveredAppointment.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => handleAppointmentAction(hoveredAppointment._id, 'confirm')}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
+                        >
+                          Xác nhận
+                        </button>
+                        <button
+                          onClick={() => handleAppointmentAction(hoveredAppointment._id, 'cancel')}
+                          className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
+                        >
+                          Hủy
+                        </button>
+                      </>
+                    )}
+
+                    {hoveredAppointment.status === 'confirmed' && (
+                      <>
+                        <button
+                          onClick={() => handleAppointmentAction(hoveredAppointment._id, 'start')}
+                          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
+                        >
+                          Bắt đầu
+                        </button>
+                        <button
+                          onClick={() => handleAppointmentAction(hoveredAppointment._id, 'cancel')}
+                          className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
+                        >
+                          Hủy
+                        </button>
+                      </>
+                    )}
+
+                    {hoveredAppointment.status === 'in_progress' && (
+                      <button
+                        onClick={() => handleAppointmentAction(hoveredAppointment._id, 'complete')}
+                        disabled={!canCompleteAppointment(hoveredAppointment)}
+                        className={`flex-1 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors ${
+                          canCompleteAppointment(hoveredAppointment)
+                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                            : 'bg-gray-400 cursor-not-allowed'
+                        }`}
+                        title={canCompleteAppointment(hoveredAppointment) ? 'Hoàn thành buổi tư vấn' : getCompletionBlockedReason(hoveredAppointment)}
+                      >
+                        Hoàn thành
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -993,4 +1155,4 @@ const WeeklyScheduleManager: React.FC = () => {
   );
 };
 
-export default WeeklyScheduleManager; 
+export default WeeklyScheduleManager;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import DataTable, { TableColumn } from 'react-data-table-component';
 import WeeklySlotPicker from './WeeklySlotPicker';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,6 +11,7 @@ import toast from 'react-hot-toast';
 import LoginModal from '../../components/auth/LoginModal';
 import { log } from '../../utils/logger';
 import { CardSkeleton, LoadingSpinner } from '../../components/common/LoadingSkeleton';
+import { FaCalendarAlt, FaSpinner, FaArrowLeft } from 'react-icons/fa';
 
 interface Consultant {
   consultant_id: string;
@@ -38,6 +40,8 @@ interface ValidationErrors {
 
 const BookAppointment: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   // Notification methods using toast
   const showSuccess = (title: string, message?: string) => {
     toast.success(`${title}${message ? ': ' + message : ''}`);
@@ -70,11 +74,11 @@ const BookAppointment: React.FC = () => {
       const response = await consultantService.getAllConsultants();
       log.apiResponse('GET', '/consultants/public', 200, response);
       
-      if (response.success && response.data) {
+      if (response.data && response.data.consultants) {
         log.component('BookAppointment', 'Consultants loaded successfully', { count: response.data.consultants?.length });
-        setConsultants(response.data.consultants || []);
+        setConsultants(response.data.consultants as unknown as Consultant[]);  
       } else {
-        log.error('BookAppointment', 'Failed to fetch consultants', response.message);
+        log.error('BookAppointment', 'Failed to fetch consultants', 'No consultants data');
         setErrors({ consultant: 'Không thể tải danh sách chuyên gia. Vui lòng thử lại.' });
       }
     } catch (error) {
@@ -89,10 +93,21 @@ const BookAppointment: React.FC = () => {
     if (isAuthenticated) {
       fetchConsultants();
       setShowLoginModal(false);
+      
+      // Check if consultant ID is provided in URL params
+      const consultantId = searchParams.get('consultant');
+      if (consultantId) {
+        setSelectedConsultant(consultantId);
+        setStep(1); // Start at step 1 (time selection for pre-selected consultant)
+        log.component('BookAppointment', 'Pre-selected consultant from URL', { consultantId });
+      } else {
+        // Nếu không có consultant param, redirect sang /consultants
+        window.location.replace('/consultants');
+      }
     } else {
       setShowLoginModal(true);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, searchParams]);
 
   const handleLoginSuccess = () => {
     setShowLoginModal(false);
@@ -101,26 +116,45 @@ const BookAppointment: React.FC = () => {
 
   const validateStep = (stepNumber: number): boolean => {
     const newErrors: ValidationErrors = {};
+    const consultantId = searchParams.get('consultant');
 
-    switch (stepNumber) {
-      case 1:
-        if (!selectedConsultant) {
-          newErrors.consultant = 'Vui lòng chọn một chuyên gia';
-        }
-        break;
-      
-      case 2:
-        if (!selectedSlot) {
-          newErrors.slot = 'Vui lòng chọn thời gian hẹn';
-        }
-        break;
-      
-      case 3:
-        // Validation for confirmation step
-        if (notes.length > 500) {
-          newErrors.notes = 'Ghi chú không được vượt quá 500 ký tự';
-        }
-        break;
+    if (consultantId) {
+      // Pre-selected consultant flow: 1=Time, 2=Confirm
+      switch (stepNumber) {
+        case 1:
+          if (!selectedSlot) {
+            newErrors.slot = 'Vui lòng chọn thời gian hẹn';
+          }
+          break;
+        case 2:
+          // Validation for confirmation step
+          if (notes.length > 500) {
+            newErrors.notes = 'Ghi chú không được vượt quá 500 ký tự';
+          }
+          break;
+      }
+    } else {
+      // Normal flow: 1=Consultant, 2=Time, 3=Confirm
+      switch (stepNumber) {
+        case 1:
+          if (!selectedConsultant) {
+            newErrors.consultant = 'Vui lòng chọn một chuyên gia';
+          }
+          break;
+        
+        case 2:
+          if (!selectedSlot) {
+            newErrors.slot = 'Vui lòng chọn thời gian hẹn';
+          }
+          break;
+        
+        case 3:
+          // Validation for confirmation step
+          if (notes.length > 500) {
+            newErrors.notes = 'Ghi chú không được vượt quá 500 ký tự';
+          }
+          break;
+      }
     }
 
     setErrors(newErrors);
@@ -152,14 +186,20 @@ const BookAppointment: React.FC = () => {
 
     setSelectedSlot({ date, startTime, endTime });
     setErrors({});
-    setStep(3); // Go directly to confirmation step
+    
+    // If consultant is pre-selected, step 2 is confirmation. Otherwise step 3 is confirmation
+    const consultantId = searchParams.get('consultant');
+    setStep(consultantId ? 2 : 3);
   };
 
 
 
   const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateStep(3)) {
+    const consultantId = searchParams.get('consultant');
+    const confirmationStep = consultantId ? 2 : 3;
+    
+    if (validateStep(confirmationStep)) {
       setShowConfirmDialog(true);
     }
   };
@@ -186,7 +226,7 @@ const BookAppointment: React.FC = () => {
         // Success feedback
         showSuccess(
           'Đặt lịch thành công!',
-          'Chúng tôi sẽ xác nhận thông tin và liên hệ với bạn sớm nhất có thể.'
+          'Chúng tôi sẽ xác nhận thông tin và liên hệ với bạn sớm nhất có thể. Đang chuyển đến trang lịch sử tư vấn...'
         );
         
         // Reset form
@@ -195,6 +235,11 @@ const BookAppointment: React.FC = () => {
         setNotes('');
         setErrors({});
         setStep(1);
+        
+        // Chuyển đến trang lịch sử tư vấn sau 2 giây
+        setTimeout(() => {
+          navigate('/my-appointments');
+        }, 2000);
       } else {
         showError('Không thể đặt lịch', response.message || 'Có lỗi xảy ra khi đặt lịch hẹn');
         setErrors({ consultant: response.message || 'Có lỗi xảy ra khi đặt lịch hẹn' });
@@ -266,7 +311,8 @@ const BookAppointment: React.FC = () => {
                         }}
                         className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-2 px-3 rounded-md transition-colors duration-200"
                       >
-                        📅 Xem lịch hẹn
+                        <FaCalendarAlt className="inline mr-2" />
+                        Xem lịch hẹn
                       </button>
                       <button
                         onClick={() => toast.dismiss(t.id)}
@@ -321,7 +367,8 @@ const BookAppointment: React.FC = () => {
                         }}
                         className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-2 px-3 rounded-md transition-colors duration-200"
                       >
-                        🔄 Tải lại trang
+                        <FaSpinner className="inline mr-2" />
+              Tải lại trang
                       </button>
                     </div>
                   </div>
@@ -431,15 +478,29 @@ const BookAppointment: React.FC = () => {
   };
 
   const getTotalSteps = () => {
-    return 3; // Always 3 steps since user must be authenticated
+    // If consultant is pre-selected from URL, we skip step 1
+    const consultantId = searchParams.get('consultant');
+    return consultantId ? 2 : 3;
   };
 
   const getStepTitle = (stepNumber: number) => {
-    switch (stepNumber) {
-      case 1: return 'Chọn chuyên gia';
-      case 2: return 'Chọn thời gian';
-      case 3: return 'Xác nhận';
-      default: return '';
+    const consultantId = searchParams.get('consultant');
+    
+    if (consultantId) {
+      // If consultant is pre-selected, steps are: 1=Time, 2=Confirm
+      switch (stepNumber) {
+        case 1: return 'Chọn thời gian';
+        case 2: return 'Xác nhận';
+        default: return '';
+      }
+    } else {
+      // Normal flow: 1=Consultant, 2=Time, 3=Confirm
+      switch (stepNumber) {
+        case 1: return 'Chọn chuyên gia';
+        case 2: return 'Chọn thời gian';
+        case 3: return 'Xác nhận';
+        default: return '';
+      }
     }
   };
 
@@ -462,8 +523,8 @@ const BookAppointment: React.FC = () => {
       width: '200px',
     },
     {
-      name: 'Trình độ',
-      selector: row => row.qualifications,
+      name: 'Kinh nghiệm',
+      selector: row => `${row.experience_years} năm`,
       sortable: true,
       width: '200px',
     },
@@ -487,41 +548,135 @@ const BookAppointment: React.FC = () => {
   const ConfirmationDialog = () => {
     if (!showConfirmDialog) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Xác nhận đặt lịch</h3>
-          
-          <div className="space-y-3 mb-6">
-            <div>
-              <span className="text-gray-600">Chuyên gia:</span>
-              <p className="font-medium">{getSelectedConsultantInfo()?.full_name}</p>
-            </div>
-            <div>
-              <span className="text-gray-600">Thời gian:</span>
-              <p className="font-medium">
-                {selectedSlot && new Date(selectedSlot.date).toLocaleDateString('vi-VN')} 
-                {selectedSlot && `, ${selectedSlot.startTime} - ${selectedSlot.endTime}`}
-              </p>
-            </div>
+    const consultantInfo = getSelectedConsultantInfo();
 
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fadeIn">
+        <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-0 transform animate-slideUp">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-xl">
+            <div className="flex items-center space-x-3">
+              <div className="bg-white bg-opacity-20 rounded-full p-2">
+                <FaCalendarAlt className="text-xl" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold">Xác nhận đặt lịch tư vấn</h3>
+                <p className="text-blue-100 text-sm">Vui lòng kiểm tra thông tin trước khi xác nhận</p>
+              </div>
+            </div>
           </div>
 
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setShowConfirmDialog(false)}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              disabled={loading}
-            >
-              Hủy
-            </button>
-            <button
-              onClick={handleConfirmSubmit}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              disabled={loading}
-            >
-              {loading ? 'Đang xử lý...' : 'Xác nhận'}
-            </button>
+          {/* Content */}
+          <div className="p-6">
+            <div className="space-y-4 mb-6">
+              {/* Consultant Info */}
+              <div className="bg-blue-50 rounded-lg p-4 border-l-4 border-blue-500">
+                <div className="flex items-start space-x-3">
+                  <div className="bg-blue-100 rounded-full p-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-blue-600 font-medium">Chuyên gia tư vấn</p>
+                    <p className="font-semibold text-gray-800">{consultantInfo?.full_name}</p>
+                    <p className="text-sm text-gray-600">{consultantInfo?.specialization}</p>
+                    {consultantInfo?.experience_years && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Kinh nghiệm: {consultantInfo.experience_years} năm
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Date & Time Info */}
+              <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                <div className="flex items-start space-x-3">
+                  <div className="bg-green-100 rounded-full p-2">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-green-600 font-medium">Thời gian hẹn</p>
+                    <p className="font-semibold text-gray-800">
+                      {selectedSlot && new Date(selectedSlot.date).toLocaleDateString('vi-VN', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {selectedSlot && `${selectedSlot.startTime} - ${selectedSlot.endTime}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {notes.trim() && (
+                <div className="bg-yellow-50 rounded-lg p-4 border-l-4 border-yellow-500">
+                  <div className="flex items-start space-x-3">
+                    <div className="bg-yellow-100 rounded-full p-2">
+                      <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-yellow-600 font-medium">Ghi chú của bạn</p>
+                      <p className="text-sm text-gray-700 mt-1 italic">"{notes.trim()}"</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Important Notice */}
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                <div className="flex items-start space-x-2">
+                  <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div className="text-sm text-amber-700">
+                    <p className="font-medium">Lưu ý quan trọng:</p>
+                    <ul className="mt-1 space-y-1 text-xs">
+                      <li>• Chuyên gia sẽ xác nhận lịch hẹn trong vòng 24 giờ</li>
+                      <li>• Bạn có thể hủy lịch trước 2 giờ mà không mất phí</li>
+                      <li>• Vui lòng chuẩn bị sẵn các câu hỏi muốn tư vấn</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 font-medium"
+                disabled={loading}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={handleConfirmSubmit}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium flex items-center justify-center space-x-2"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    <span>Đang xử lý...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaCalendarAlt className="text-sm" />
+                    <span>Xác nhận đặt lịch</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -556,7 +711,8 @@ const BookAppointment: React.FC = () => {
               href="/dashboard/customer/appointments"
               className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
             >
-              📅 Xem lịch hẹn của tôi
+              <FaCalendarAlt className="inline mr-2" />
+            Xem lịch hẹn của tôi
             </a>
           </div>
           
@@ -625,85 +781,25 @@ const BookAppointment: React.FC = () => {
           </div>
         )}
 
-        {/* Step 1: Choose Consultant */}
-        {step === 1 && isAuthenticated && (
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Bước 1: Chọn Chuyên Gia</h2>
-            
-            {consultantsLoading ? (
-              <CardSkeleton count={3} />
-            ) : consultants.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-600 mb-4">Không có chuyên gia nào khả dụng</p>
-                <button
-                  onClick={handleRetryFetchConsultants}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Tải lại
-                </button>
-              </div>
-            ) : (
-              <DataTable
-                columns={columns}
-                data={consultants}
-                pagination
-                highlightOnHover
-                striped
-                noDataComponent={
-                  <div className="text-center py-8">
-                    <p className="text-gray-600">Không tìm thấy chuyên gia nào</p>
-                  </div>
-                }
-                customStyles={{
-                  header: {
-                    style: {
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                    },
-                  },
-                  headRow: {
-                    style: {
-                      backgroundColor: '#f8f9fa',
-                    },
-                  },
-                }}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Step 2: Choose Time */}
-        {step === 2 && selectedConsultant && isAuthenticated && (
+        {/* Step 2: Choose Time OR Step 1 if consultant pre-selected */}
+        {step === 1 && selectedConsultant && isAuthenticated && (
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">Bước 2: Chọn Thời Gian</h2>
-                <button
-                  onClick={() => {
-                    setStep(1);
-                    setSelectedSlot(null);
-                    setErrors({});
-                  }}
-                  className="text-blue-600 hover:text-blue-700 text-sm"
-                >
-                  ← Thay đổi chuyên gia
-                </button>
+                <h2 className="text-lg font-semibold text-gray-800">Chọn Thời Gian</h2>
               </div>
-              
               <div className="mb-4 p-4 bg-blue-50 rounded-lg">
                 <p className="text-sm text-blue-800">
                   <strong>Chuyên gia đã chọn:</strong> {getSelectedConsultantInfo()?.full_name} 
                   - {getSelectedConsultantInfo()?.specialization}
                 </p>
               </div>
-
               {errors.slot && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-red-700 text-sm">{errors.slot}</p>
                 </div>
               )}
             </div>
-
             <WeeklySlotPicker
               consultantId={selectedConsultant}
               onSlotSelect={handleSlotSelect}
@@ -712,19 +808,19 @@ const BookAppointment: React.FC = () => {
           </div>
         )}
 
-        {/* Step 3: Confirmation */}
-        {step === 3 && isAuthenticated && (
+        {/* Step 3: Confirmation OR Step 2 if consultant pre-selected */}
+        {step === 2 && isAuthenticated && (
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Bước 3: Xác Nhận Thông Tin</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Xác Nhận Thông Tin</h2>
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(1)}
                 className="text-blue-600 hover:text-blue-700 text-sm"
               >
-                ← Thay đổi thời gian
+                <FaArrowLeft className="inline mr-2" />
+                Thay đổi thời gian
               </button>
             </div>
-
             <form onSubmit={handlePreSubmit}>
               {/* Booking Summary */}
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -748,7 +844,6 @@ const BookAppointment: React.FC = () => {
                   </div>
                 </div>
               </div>
-
               {/* Notes */}
               <div className="mb-6">
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
@@ -764,43 +859,42 @@ const BookAppointment: React.FC = () => {
                   }`}
                   placeholder="Mô tả về vấn đề bạn muốn tư vấn, triệu chứng, hoặc thông tin khác..."
                   maxLength={500}
-                    />
-                    <div className="flex justify-between items-center mt-1">
-                      <div>
-                        {errors.notes && (
-                          <p className="text-sm text-red-600">{errors.notes}</p>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500">{notes.length}/500</p>
-                    </div>
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <div>
+                    {errors.notes && (
+                      <p className="text-sm text-red-600">{errors.notes}</p>
+                    )}
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex justify-end space-x-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedConsultant('');
-                        setSelectedSlot(null);
-                        setNotes('');
-                        setErrors({});
-                        setStep(1);
-                      }}
-                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                    >
-                      Bắt đầu lại
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                    >
-                      {loading && <LoadingSpinner size="sm" />}
-                      <span>{loading ? 'Đang đặt lịch...' : 'Đặt lịch'}</span>
-                    </button>
-                  </div>
-                </form>
+                  <p className="text-xs text-gray-500">{notes.length}/500</p>
+                </div>
               </div>
+              {/* Actions */}
+              <div className="flex justify-end space-x-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedConsultant('');
+                    setSelectedSlot(null);
+                    setNotes('');
+                    setErrors({});
+                    window.location.replace('/consultants');
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Bắt đầu lại
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {loading && <LoadingSpinner size="sm" />}
+                  <span>{loading ? 'Đang đặt lịch...' : 'Đặt lịch'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
         )}
 
         {/* Confirmation Dialog */}
@@ -820,4 +914,4 @@ const BookAppointment: React.FC = () => {
   );
 };
 
-export default BookAppointment; 
+export default BookAppointment;

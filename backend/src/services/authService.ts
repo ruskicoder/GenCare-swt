@@ -3,14 +3,15 @@ import { LoginRequest } from '../dto/requests/LoginRequest';
 import { LoginResponse } from '../dto/responses/LoginResponse';
 import { UserRepository } from '../repositories/userRepository';
 import { RegisterRequest } from '../dto/requests/RegisterRequest';
-import { RegisterResponse } from '../dto/responses/RegisterResponse';
+import { RegisterResponse, VerificationResponse } from '../dto/responses/RegisterResponse';
 import { JWTUtils } from '../utils/jwtUtils';
 import { User, IUser } from '../models/User';
 import nodemailer from 'nodemailer'
 import redisClient from '../configs/redis';
 import { ChangePasswordResponse } from '../dto/responses/ChangePasswordResponse';
-import { ObjectId } from 'mongoose';
+import mongoose, { ObjectId } from 'mongoose';
 import { RandomUtils } from '../utils/randomUtils';
+import { MailUtils } from '../utils/mailUtils';
 
 export class AuthService {
     public static async login(loginRequest: LoginRequest): Promise<LoginResponse> {
@@ -30,6 +31,20 @@ export class AuthService {
                 return {
                     success: false,
                     message: 'Tài khoản đã bị vô hiệu hóa'
+                };
+            }
+
+            if (!user.email_verified) {
+                return {
+                    success: false,
+                    message: 'Tài khoản chưa được xác thực email. Vui lòng xác thực OTP trước khi đăng nhập.'
+                };
+            }
+
+            if (!user.password) {
+                return {
+                    success: false,
+                    message: 'Tài khoản này được tạo bằng Google. Vui lòng đăng nhập bằng Google.'
                 };
             }
 
@@ -65,7 +80,6 @@ export class AuthService {
                     updated_date: user.updated_date,
                     last_login: user.last_login || null,
                     email_verified: user.email_verified,
-                    googleId: user.googleId || null
                 },
                 accessToken: accessToken
             };
@@ -84,13 +98,13 @@ export class AuthService {
             // Update last login
             await UserRepository.updateLastLogin(user._id);
             console.log(user);
-            
+
             // Generate JWT access token
             const accessToken = JWTUtils.generateAccessToken({
                 userId: user._id.toString(),
                 role: user.role
             });
-            
+
             return {
                 success: true,
                 message: 'Đăng nhập thành công',
@@ -108,7 +122,6 @@ export class AuthService {
                     updated_date: user.updated_date,
                     last_login: user.last_login || null,
                     email_verified: user.email_verified,
-                    googleId: user.googleId || null
                 },
                 accessToken: accessToken
             };
@@ -122,95 +135,132 @@ export class AuthService {
         }
     }
 
-    public static async sendPassword(emailSendTo: string, password: string) {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_FOR_VERIFY || '',
-                pass: process.env.EMAIL_APP_PASSWORD || ''
-            }
-        })
 
-        const mailContent = {
-            from: `"Mật khẩu đăng nhập GenCare" <${process.env.EMAIL_FOR_VERIFY || null}>`,
-            to: emailSendTo,
-            subject: `Mật khẩu hiện tại của email ${emailSendTo} là:`,
-            html: `<body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                        <div style="max-width: 500px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                            <h2>Mật khẩu của bạn là: <strong style="color:#2a9d8f;">${password}</strong></h2>
-                            <p>Mật khẩu này sẽ được sử dụng để đăng nhập trong hệ thống GenCare của chúng tôi</p>
-                            <p>Đường dẫn đến trang web là: http://localhost:5173</p>
-                            <p>Trân trọng,</p>
-                            <h4>${process.env.APP_NAME || 'GenCare'}</h4>
-                        </div>
-                    </body>`
-        }
-        if (!emailSendTo) {
-            return {
-                success: false,
-                message: "Mail does not exist"
-            }
-        }
-        await transporter.sendMail(mailContent);            //gửi mail với content đã thiết lập
-        return {
-            success: true,
-            message: "Send mail successfully"
-        }
-    }
+    public static async insertGoogle(profile: any): Promise<IUser> {
+        try {
+            console.log('Processing Google profile:', profile.emails[0]?.value);
 
-    public static async insertGoogle(profile: any): Promise<Partial<IUser>> {
-        const email = profile.emails[0]?.value || null;
-        const full_name = [profile.name.givenName, profile.name.familyName].filter(Boolean).join(" ");
-        const registration_date = new Date();
-        const updated_date = new Date();
-        const status = true;
-        const email_verified = true;
-        const role = 'customer';
-        const googleId = profile.id;
-        const avatar = profile.photos?.[0]?.value || null; // Lấy avatar từ Google
+            const email = profile.emails[0]?.value ?? null;
+            const full_name = [profile.name.givenName, profile.name.familyName].filter(Boolean).join(" ");
+            const avatar = profile.photos?.[0]?.value || null;
 
-        let user = await UserRepository.findByEmail(email);
-        if (user) {
-            if (!user.googleId) {
-                user.googleId = googleId;
+            // Tìm user bằng email - SỬA: Không dùng lean() để có full mongoose document
+            let user = await User.findOne({ email });
+
+            if (user) {
+                console.log('Existing user found:', user.email);
+                // User đã tồn tại - cập nhật avatar nếu chưa có
+                let needUpdate = false;
+                const updateData: any = {
+                    updated_date: new Date(),
+                    last_login: new Date()
+                };
+
                 if (!user.avatar && avatar) {
-                    user.avatar = avatar; // Cập nhật avatar nếu chưa có
+                    updateData.avatar = avatar;
+                    needUpdate = true;
                 }
-                await user.save();
+
+                if (needUpdate) {
+                    await User.findByIdAndUpdate(user._id, updateData);
+                    // Refresh user object
+                    user = await User.findById(user._id);
+                } else {
+                    // Chỉ cập nhật last_login
+                    await User.findByIdAndUpdate(user._id, { last_login: new Date() });
+                }
+
+                return user!;
             }
-            return user;
+
+            // User chưa tồn tại - tạo mới
+            console.log('Creating new user for:', email);
+            const password = RandomUtils.generateRandomString(8, true);
+
+            // Gửi password qua email (non-blocking)
+            await MailUtils.sendPasswordForGoogle(email, password).catch(error => {
+                console.error('Error sending password email:', error);
+            });
+
+            const newUserData = {
+                email,
+                password: await bcrypt.hash(password, 10),
+                full_name,
+                registration_date: new Date(),
+                updated_date: new Date(),
+                status: true,
+                email_verified: true,
+                role: 'customer' as const,
+                phone: null,
+                date_of_birth: null,
+                last_login: new Date(),
+                avatar: avatar
+            };
+
+            const newUser = new User(newUserData);
+            const savedUser = await newUser.save();
+
+            console.log('New user created successfully:', savedUser.email);
+            return savedUser;
+
+        } catch (error) {
+            console.error('insertGoogle error:', error);
+            throw error;
         }
-        const password = RandomUtils.generateRandomPassword();
-        this.sendPassword(email, password);
-        
-        user = await UserRepository.insertUser({
-            email,
-            password: await bcrypt.hash(password, 10),
-            full_name,
-            registration_date,
-            updated_date,
-            status,
-            email_verified,
-            role,
-            googleId,
-            phone: null,
-            date_of_birth: null,
-            last_login: null,
-            avatar: avatar // Thêm avatar từ Google
-        });
-        return user;
     }
 
+    // Đăng ký
     public static async register(registerRequest: RegisterRequest): Promise<RegisterResponse> {
         try {
-            const { email, password, full_name, phone, date_of_birth, gender } = registerRequest;
-
-            await redisClient.setEx(`pass:${email}`, 300, password);
-
+            const { email, full_name, phone, date_of_birth, gender } = registerRequest;
+            if (!email) return { success: false, message: 'Email is invalid' };
             const existedUser = await UserRepository.findByEmail(email);
+            if (existedUser) {
+                if (existedUser.status === true)
+                    return { success: false, message: 'Email is existed. Login please' };
+                else return { success: false, message: 'This email is banned' };
+            }
+            await redisClient.setEx(`user:${email}`, 600, JSON.stringify(registerRequest));
+            const otp = await MailUtils.sendOtpForRegister(email);
+            await redisClient.setEx(`otp:${email}`, 300, otp);
+            return {
+                success: true,
+                message: 'Send OTP successfully',
+                user_email: email
+            }
+        } catch (error) {
+            console.error('Register error:', error);
+            return {
+                success: false,
+                message: 'Server error'
+            };
+        }
+    }
 
-            const user = {
-                email: email,
+    // Kiểm tra OTP
+    public static async verifyOTP(email: string, otp: string): Promise<VerificationResponse> {
+        try {
+            if (!email || !otp)
+                return {
+                    success: false, message: 'Email or otp is not found'
+                };
+            const storedOtp = await redisClient.get(`otp:${email}`);
+            if (!storedOtp || storedOtp !== otp)
+                return {
+                    success: false,
+                    message: 'OTP is invalid or expired'
+                };
+            const tempUser = await redisClient.get(`user:${email}`);
+            if (!tempUser) {
+                return {
+                    success: false,
+                    message: 'Cannot find registered data'
+                };
+            }
+
+            const { password, full_name, phone, date_of_birth, gender } = JSON.parse(tempUser.toString());
+            const user: Partial<IUser> = {
+                email,
                 password: await bcrypt.hash(password, 10),
                 full_name: full_name.trim(),
                 phone: phone?.trim() || null,
@@ -218,78 +268,61 @@ export class AuthService {
                 gender: gender || null,
                 registration_date: new Date(),
                 updated_date: new Date(),
-                last_login: null,
+                last_login: new Date(), // Set last_login ngay lập tức
                 status: true,
                 email_verified: true,
                 role: 'customer',
-                googleId: null,
-                avatar: null // Mặc định null, user có thể upload sau
+                avatar: null
             };
 
-            if (existedUser) {
-                return {
-                    success: false,
-                    message: 'Email này đã tồn tại. Hãy đăng nhập',
-                };
-            }
-            await redisClient.setEx(`user:${email}`, 300, JSON.stringify(user));
+            // const insertedUser = await UserRepository.insertUser(user);
+            const insertedUser = await UserRepository.saveUser(user);
+            await redisClient.del(`user:${email}`);
+            await redisClient.del(`otp:${email}`);
+
+
+            // Tạo access token luôn để tự động đăng nhập
+            const accessToken = JWTUtils.generateAccessToken({
+                userId: insertedUser._id.toString(),
+                role: insertedUser.role
+            });
+
             return {
                 success: true,
-                message: 'Đăng ký thành công',
-                user_email: email
+                message: 'Register successfully',
+                user: {
+                    id: insertedUser._id.toString(),
+                    email: insertedUser.email,
+                    full_name: insertedUser.full_name,
+                    role: insertedUser.role,
+                    status: insertedUser.status,
+                    avatar: insertedUser.avatar,
+                    phone: insertedUser.phone,
+                    date_of_birth: insertedUser.date_of_birth,
+                    gender: insertedUser.gender,
+                    registration_date: insertedUser.registration_date,
+                    updated_date: insertedUser.updated_date,
+                    last_login: insertedUser.last_login,
+                    email_verified: insertedUser.email_verified,
+                },
+                accessToken: accessToken // Thêm access token
             };
-
         } catch (error) {
-            console.error('Register error:', error);
+
             return {
+
                 success: false,
-                message: 'Lỗi hệ thống'
+                message: 'Server error'
             };
         }
-    }
-
-    public static async sendOTP(emailSendTo: string) {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_FOR_VERIFY || '',
-                pass: process.env.EMAIL_APP_PASSWORD || ''
-            }
-        })
-
-        const otpGenerator = RandomUtils.generateRandomOTP(100000,999999);
-
-        const mailContent = {
-            from: `"Xác thực OTP" <${process.env.EMAIL_FOR_VERIFY || null}>`,
-            to: emailSendTo,
-            subject: "Mã xác thực OTP của bạn là: ",
-            html: `<body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                        <div style="max-width: 500px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                            <h2>Mã OTP của bạn là: <strong style="color:#2a9d8f;">${otpGenerator}</strong></h2>
-                            <p>OTP sẽ hết hạn trong 5 phút.</p>
-                            <p>Trân trọng,</p>
-                            <h4>${process.env.APP_NAME || 'GenCare'}</h4>
-                        </div>
-                    </body>`
-        }
-        if (!emailSendTo) {
-            console.error("Không có email người nhận!");
-        }
-        await transporter.sendMail(mailContent);            //gửi mail với content đã thiết lập
-        return otpGenerator;
-
-    }
-
-    public static async insertByMyApp(user: string): Promise<void> {
-        await UserRepository.insertUser(JSON.parse(user));
     }
 
     /**
      * Kiểm tra xem old_password có giống trong db không
      */
-    public static async verifyOldPassword(userId: ObjectId, oldPassword: string): Promise<boolean> {
+    public static async verifyOldPassword(userId: string, oldPassword: string): Promise<boolean> {
         try {
-            const user = await UserRepository.findById(userId.toString());
+            const user = await UserRepository.findById(userId);
             if (!user) {
                 throw new Error('User not found');
             }
@@ -311,8 +344,9 @@ export class AuthService {
         }
     }
 
-    public static async updatePassword(_id: ObjectId, hashedPassword: string): Promise<void> {
+    public static async updatePassword(userId: string, hashedPassword: string): Promise<void> {
         try {
+            const _id = new mongoose.Types.ObjectId(userId);
             const result = await User.findOneAndUpdate(
                 { _id },
                 { password: hashedPassword },
@@ -328,7 +362,7 @@ export class AuthService {
     }
 
     public static async changePasswordForUsers(
-        userId: ObjectId,
+        userId: string,
         oldPassword: string,
         newPassword: string,
     ): Promise<ChangePasswordResponse> {
@@ -340,8 +374,8 @@ export class AuthService {
                 };
             }
 
-            const user = await UserRepository.findById(userId.toString());
-            
+            const user = await UserRepository.findById(userId);
+
             if (!user) {
                 return {
                     success: false,
@@ -372,8 +406,8 @@ export class AuthService {
         } catch (error) {
             console.error('changePasswordForUsers error:', error);
             return {
-                    success: false,
-                    message: 'System error',
+                success: false,
+                message: 'System error',
             };
         }
     }
