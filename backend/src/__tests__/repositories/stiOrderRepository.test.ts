@@ -32,7 +32,7 @@ describe('StiOrderRepository', () => {
 
   describe('insertStiOrder', () => {
     it('should create a new STI order', async () => {
-      const orderData = {
+      const orderData = new StiOrder({
         customer_id: testUser._id,
         sti_schedule_id: testStiSchedule._id,
         order_date: new Date(),
@@ -40,7 +40,7 @@ describe('StiOrderRepository', () => {
         payment_status: 'Pending' as const,
         order_status: 'Booked' as const,
         notes: 'New test order'
-      };
+      });
 
       const result = await StiOrderRepository.insertStiOrder(orderData);
 
@@ -127,10 +127,12 @@ describe('StiOrderRepository', () => {
 
   describe('getOrdersByTestScheduleId', () => {
     it('should find orders by test schedule ID', async () => {
-      const result = await StiOrderRepository.getOrdersByTestScheduleId(testStiSchedule);
+      const result = await StiOrderRepository.getOrdersByTestScheduleId(testStiSchedule._id);
 
       expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBeGreaterThan(0);
+      if (Array.isArray(result)) {
+        expect(result.length).toBeGreaterThan(0);
+      }
     });
   });
 
