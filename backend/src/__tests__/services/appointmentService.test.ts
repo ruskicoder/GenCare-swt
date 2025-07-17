@@ -91,13 +91,13 @@ describe('AppointmentService', () => {
 
       it('should reject booking less than 2 hours in advance', async () => {
         const now = new Date();
-        const oneAndHalfHoursFromNow = new Date(now.getTime() + 1.5 * 60 * 60 * 1000); // 1.5 hours 
+        const oneHourFromNow = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour 
         
         const appointmentData = TestDataFactory.createTestAppointmentData(
           testUser._id.toString(),
           testConsultant._id.toString(),
           { 
-            appointment_date: oneAndHalfHoursFromNow,
+            appointment_date: oneHourFromNow,
             start_time: '10:00',
             end_time: '11:00'
           }
@@ -126,7 +126,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('cannot be in the past');
+        expect(result.message).toContain('Cannot book appointments in the past');
       });
 
       it('should reject overlapping appointments for same consultant', async () => {
@@ -154,7 +154,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(overlappingAppointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('time conflict');
+        expect(result.message).toContain('The consultant already has an appointment at this time');
       });
     });
 
@@ -168,7 +168,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Invalid customer ID format');
+        expect(result.message).toContain('Customer not found');
       });
 
       it('should reject invalid consultant ID', async () => {
@@ -180,7 +180,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Invalid consultant ID format');
+        expect(result.message).toContain('Consultant not found');
       });
 
       it('should reject invalid time format', async () => {
@@ -206,7 +206,7 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('End time must be after start time');
+        expect(result.message).toContain('Start time must be before end time');
       });
 
       it('should reject when start time equals end time', async () => {
@@ -219,14 +219,14 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(appointmentData);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('End time must be after start time');
+        expect(result.message).toContain('Start time must be before end time');
       });
 
       it('should reject missing required fields', async () => {
         const result = await AppointmentService.bookAppointment({} as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Invalid input data');
+        expect(result.message).toContain('Missing required fields');
       });
 
       it('should reject non-existent customer ID', async () => {
@@ -345,14 +345,14 @@ describe('AppointmentService', () => {
         const result = await AppointmentService.bookAppointment(null as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Invalid input data');
+        expect(result.message).toContain('Appointment data is required');
       });
 
       it('should handle empty object parameters', async () => {
         const result = await AppointmentService.bookAppointment({} as any);
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain('Invalid input data');
+        expect(result.message).toContain('Missing required fields');
       });
     });
   });

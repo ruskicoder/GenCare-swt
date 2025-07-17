@@ -42,8 +42,7 @@ export class AppointmentService {
         customer_notes?: string;
     }): Promise<AppointmentResponse> {
         try {
-            console.log('=== BOOKING APPOINTMENT DEBUG ===');
-            console.log('Input data:', appointmentData);
+            // Debug logging removed for clean test output
 
             // Input validation
             if (!appointmentData) {
@@ -214,7 +213,7 @@ export class AppointmentService {
                 updated_date: new Date()
             });
 
-            console.log('Appointment created:', newAppointment._id);
+            // Appointment created successfully
 
             // Log appointment history
             try {
@@ -234,7 +233,7 @@ export class AppointmentService {
                     appointmentData.customer_id,
                     'customer'
                 );
-                console.log('✅ Appointment history created successfully for:', newAppointment._id);
+                // Appointment history created successfully
             } catch (historyError) {
                 console.error('❌ Failed to create appointment history:', historyError);
             }
@@ -368,7 +367,7 @@ export class AppointmentService {
                         meeting_id: `gen-meeting-${appointmentId.slice(-8)}`,
                         calendar_event_id: null
                     };
-                    console.log('Fallback meeting details generated:', meetingDetails);
+                    // Fallback meeting details generated
                 }
             } catch (error) {
                 console.error('Failed to create meeting details:', error);
@@ -436,7 +435,7 @@ export class AppointmentService {
                 EmailNotificationService.sendAppointmentConfirmation(emailData)
                     .then(result => {
                         if (result.success) {
-                            console.log('Confirmation email with real Google Meet sent successfully');
+                            // Confirmation email sent successfully
                         } else {
                             console.error('Failed to send confirmation email:', result.message);
                         }

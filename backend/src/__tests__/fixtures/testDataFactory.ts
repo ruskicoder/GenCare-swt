@@ -139,46 +139,6 @@ export class TestDataFactory {
     };
   }
 
-  // Create test STI test
-  static async createTestStiTest(overrides: Partial<IStiTest> = {}): Promise<IStiTest> {
-    // Generate unique code to avoid duplicate key errors
-    const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const testData = {
-      sti_test_name: `Test STI Test ${randomId}`,
-      sti_test_code: `STI-VIR-BLD-${randomId}`,
-      sti_test_type: 'máu' as const,
-      category: 'viral' as const,
-      price: 100,
-      description: 'Test STI test description',
-      is_active: true,
-      createdBy: new mongoose.Types.ObjectId(),
-      ...overrides
-    };
-
-    const stiTest = new StiTest(testData);
-    await stiTest.save();
-    return stiTest;
-  }
-
-  // Create test STI package
-  static async createTestStiPackage(overrides: Partial<IStiPackage> = {}): Promise<IStiPackage> {
-    // Generate unique code to avoid duplicate key errors
-    const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const packageData = {
-      sti_package_name: `Test STI Package ${randomId}`,
-      sti_package_code: `PKG${randomId}`,
-      price: 200,
-      description: 'Test STI package description',
-      is_active: true,
-      createdBy: new mongoose.Types.ObjectId(),
-      ...overrides
-    };
-
-    const stiPackage = new StiPackage(packageData);
-    await stiPackage.save();
-    return stiPackage;
-  }
-
   // Create test STI test schedule
   static async createTestStiTestSchedule(overrides: Partial<IStiTestSchedule> = {}): Promise<IStiTestSchedule> {
     const tomorrow = new Date();
@@ -195,6 +155,57 @@ export class TestDataFactory {
     const schedule = new StiTestSchedule(scheduleData);
     await schedule.save();
     return schedule;
+  }
+
+  // Create test STI package
+  static async createTestStiPackage(overrides: Partial<IStiPackage> = {}): Promise<IStiPackage> {
+    const randomId = Math.random().toString(36).substring(2, 8);
+    const adminUser = await this.createTestUser({
+      full_name: 'Admin User',
+      email: `admin${randomId}@example.com`,
+      role: 'admin'
+    });
+
+    const packageData = {
+      sti_package_name: `Basic STI Package ${randomId}`,
+      sti_package_code: `BASIC${randomId}`,
+      price: 150,
+      description: 'Basic STI testing package',
+      is_active: true,
+      createdBy: adminUser._id,
+      ...overrides
+    };
+
+    const stiPackage = new StiPackage(packageData);
+    await stiPackage.save();
+    return stiPackage;
+  }
+
+  // Create test STI test
+  static async createTestStiTest(overrides: Partial<IStiTest> = {}): Promise<IStiTest> {
+    const randomId = Math.random().toString(36).substring(2, 8);
+    const adminUser = await this.createTestUser({
+      full_name: 'Admin User',
+      email: `admin${randomId}@example.com`,  
+      role: 'admin'
+    });
+
+    const testCode = `STI-BAC-URN-T${randomId.toUpperCase()}`;
+    const testData = {
+      sti_test_name: `Chlamydia Test ${randomId}`,
+      sti_test_code: testCode,
+      description: 'Chlamydia detection test',
+      price: 50,
+      category: 'bacterial' as const,
+      sti_test_type: 'nước tiểu' as const,
+      is_active: true,
+      createdBy: adminUser._id,
+      ...overrides
+    };
+
+    const stiTest = new StiTest(testData);
+    await stiTest.save();
+    return stiTest;
   }
 
   // Create test STI order data
