@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">9.23% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>6/65</span>
+                <span class='fraction'>0/65</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">7.14% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/28</span>
+                <span class='fraction'>0/28</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">10% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/10</span>
+                <span class='fraction'>0/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">9.23% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>6/65</span>
+                <span class='fraction'>0/65</span>
             </div>
         
             
@@ -322,12 +322,10 @@
 <a name='L257'></a><a href='#L257'>257</a>
 <a name='L258'></a><a href='#L258'>258</a>
 <a name='L259'></a><a href='#L259'>259</a>
-<a name='L260'></a><a href='#L260'>260</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<a name='L260'></a><a href='#L260'>260</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -337,8 +335,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">30x</span>
-<span class="cline-any cline-yes">30x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -348,7 +348,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">30x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -581,14 +581,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { AppointmentHistory, IAppointmentHistory } from '../models/AppointmentHistory';
-import mongoose from 'mongoose';
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import { AppointmentHistory, IAppointmentHistory } from '../models/AppointmentHistory';</span>
+<span class="cstat-no" title="statement not covered" >import mongoose from 'mongoose';</span>
 &nbsp;
-export class AppointmentHistoryRepository {
+<span class="cstat-no" title="statement not covered" >export class A</span>ppointmentHistoryRepository {
     /**
      * Tạo history record mới
      */
-    public static async create(historyData: {
+    public <span class="fstat-no" title="function not covered" >static </span>async create(historyData: {
         appointment_id: string;
         action: 'created' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed' | 'updated' | 'started';
         performed_by_user_id: string;
@@ -596,8 +596,8 @@ export class AppointmentHistoryRepository {
         old_data?: any;
         new_data: any;
     }): Promise&lt;IAppointmentHistory&gt; {
-        try {
-            const history = new AppointmentHistory({
+<span class="cstat-no" title="statement not covered" >        try {</span>
+            const history = <span class="cstat-no" title="statement not covered" >new AppointmentHistory({</span>
                 appointment_id: new mongoose.Types.ObjectId(historyData.appointment_id),
                 action: historyData.action,
                 performed_by_user_id: new mongoose.Types.ObjectId(historyData.performed_by_user_id),
@@ -607,7 +607,7 @@ export class AppointmentHistoryRepository {
                 timestamp: new Date()
             });
 &nbsp;
-            return await history.save();
+<span class="cstat-no" title="statement not covered" >            return await history.save();</span>
         } catch (error) {
 <span class="cstat-no" title="statement not covered" >            console.error('Error creating appointment history:', error);</span>
 <span class="cstat-no" title="statement not covered" >            throw error;</span>
@@ -847,7 +847,7 @@ export class AppointmentHistoryRepository {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-07-16T17:37:25.124Z
+                at 2025-07-17T02:08:46.556Z
             </div>
         <script src="../prettify.js"></script>
         <script>
