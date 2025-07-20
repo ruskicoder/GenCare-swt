@@ -6,24 +6,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { connectDatabase } from './configs/database';
-import authController from './controllers/authController';
 import { errorHandler } from './middlewares/errorHandler';
 import session from 'express-session';
-import passport from './configs/passport';
 import redisClient from './configs/redis';
-import blogController from './controllers/blogController';
-import weeklyScheduleController from './controllers/weeklyScheduleController';
-import appointmentController from './controllers/appointmentController';
-import consultantController from './controllers/consultantController';
-import profileController from './controllers/profileController';
-import stiController from './controllers/stiController';
-import { ReminderSchedulerService } from './services/reminderSchedulerService';
 import menstrualCycleController from './controllers/menstrualCycleController';
-import pillTrackingController from './controllers/pillTrackingController'
-import { PillTrackingReminderService } from './services/pillTrackingService';
-import appointmentHistoryController from './controllers/appointmentHistoryController';
-import stiAssessmentRoutes from './controllers/stiAssessmentController';
-import userController from './controllers/userController';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,23 +57,10 @@ app.use(
   })
 );
 
-// Initialize passport
-app.use(passport.initialize());
-app.use(passport.session());
+// Passport not configured in this minimal setup
 
 // Routes
-app.use('/api/auth', authController);
-app.use('/api/blogs', blogController);
-app.use('/api/weekly-schedule', weeklyScheduleController);
-app.use('/api/appointments', appointmentController);
-app.use('/api/appointment-history', appointmentHistoryController);
-app.use('/api/consultants', consultantController);
-app.use('/api/profile', profileController);
-app.use('/api/users', userController);
-app.use('/api/sti', stiController);
 app.use('/api/menstrual-cycle', menstrualCycleController);
-app.use('/api/pill-tracking', pillTrackingController);
-app.use('/api/sti-assessment', stiAssessmentRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -96,8 +69,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     services: {
       database: 'Connected',
-      redis: redisClient.isOpen ? 'Connected' : 'Disconnected',
-      reminderScheduler: ReminderSchedulerService.getStatus().isRunning ? 'Running' : 'Stopped'
+      redis: redisClient.isOpen ? 'Connected' : 'Disconnected'
     }
   });
 });
@@ -126,22 +98,9 @@ const startServer = async () => {
       console.log(`🏥 Health check: http://localhost:${PORT}/health`);
     });
 
-    // 4. Start reminder scheduler
-    console.log('⏰ Starting reminder scheduler...');
-    ReminderSchedulerService.startScheduler();
-    console.log('✅ Reminder scheduler started!');
-    PillTrackingReminderService.startPillReminder();
-    console.log('✅ Pill reminder scheduler started!');
-
     console.log('🎉 All services started successfully!');
     console.log('📋 Available services:');
-    console.log('   - Authentication: /api/auth');
-    console.log('   - Appointments: /api/appointments');
-    console.log('   - Blogs: /api/blogs');
-    console.log('   - Consultants: /api/consultants');
-    console.log('   - STI Services: /api/sti');
-    console.log('   - Weekly Schedule: /api/weekly-schedule');
-    console.log('   - Profile: /api/profile');
+    console.log('   - Menstrual Cycle: /api/menstrual-cycle');
     console.log('   - Health Check: /health');
 
   } catch (error) {
@@ -155,12 +114,6 @@ process.on('SIGINT', async () => {
   console.log('\n🛑 Received SIGINT, shutting down gracefully...');
 
   try {
-    // Stop reminder scheduler
-    ReminderSchedulerService.stopScheduler();
-    console.log('✅ Reminder scheduler stopped');
-
-    PillTrackingReminderService.stopPillReminder();
-    console.log('✅ Pill reminder scheduler stopped');
     // Close Redis connection
     await redisClient.quit();
     console.log('✅ Redis connection closed');
@@ -177,7 +130,6 @@ process.on('SIGTERM', async () => {
   console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
 
   try {
-    ReminderSchedulerService.stopScheduler();
     await redisClient.quit();
     console.log('✅ Graceful shutdown completed');
     process.exit(0);

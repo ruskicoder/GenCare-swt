@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>7/14</span>
+                <span class='fraction'>14/14</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/6</span>
+                <span class='fraction'>6/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">53.84% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>7/13</span>
+                <span class='fraction'>13/13</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line medium'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -107,7 +107,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">118x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -116,38 +116,38 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">71x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">840x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">137x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">118x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import crypto from 'crypto';
 &nbsp;
 export class RandomUtils {
-    public static generateRandomOTP = <span class="fstat-no" title="function not covered" >(s</span>tartRandom: number, endRandom: number): string =&gt; {
-<span class="cstat-no" title="statement not covered" >        return crypto.randomInt(startRandom, endRandom).toString();</span>
+    public static generateRandomOTP = (startRandom: number, endRandom: number): string =&gt; {
+        return crypto.randomInt(startRandom, endRandom).toString();
     };
 &nbsp;
     /**
@@ -155,33 +155,33 @@ export class RandomUtils {
      * @param length Length of string to generate
      * @param includeNumbers Whether to include numbers (default: false for Meet ID)
      */
-    public static generateRandomString = <span class="fstat-no" title="function not covered" >(l</span>ength: number, includeNumbers: boolean = <span class="branch-0 cbranch-no" title="branch not covered" >false)</span>: string =&gt; {
-        const chars = <span class="cstat-no" title="statement not covered" >includeNumbers</span>
+    public static generateRandomString = (length: number, includeNumbers: boolean = false): string =&gt; {
+        const chars = includeNumbers
             ? 'abcdefghijklmnopqrstuvwxyz0123456789'
             : 'abcdefghijklmnopqrstuvwxyz';
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        return Array.from({ length }, <span class="fstat-no" title="function not covered" >() =</span>&gt; <span class="cstat-no" title="statement not covered" >chars[Math.floor(Math.random() * chars.length)])</span>.join('');</span>
+        return Array.from({ length }, () =&gt; chars[Math.floor(Math.random() * chars.length)]).join('');
     };
 &nbsp;
     /**
      * Generate meeting password (6 digits)
      */
-    public static generateMeetingPassword = <span class="fstat-no" title="function not covered" >(): string =</span>&gt; {
-<span class="cstat-no" title="statement not covered" >        return crypto.randomInt(100000, 999999).toString();</span>
+    public static generateMeetingPassword = (): string =&gt; {
+        return crypto.randomInt(100000, 999999).toString();
     };
 &nbsp;
     /**
      * Generate secure random token
      */
-    public static generateSecureToken = <span class="fstat-no" title="function not covered" >(l</span>ength: number = <span class="branch-0 cbranch-no" title="branch not covered" >32)</span>: string =&gt; {
-<span class="cstat-no" title="statement not covered" >        return crypto.randomBytes(length).toString('hex');</span>
+    public static generateSecureToken = (length: number = 32): string =&gt; {
+        return crypto.randomBytes(length).toString('hex');
     };
 &nbsp;
     /**
      * Generate UUID-like string
      */
-    public static generateUUID = <span class="fstat-no" title="function not covered" >(): string =</span>&gt; {
-<span class="cstat-no" title="statement not covered" >        return crypto.randomUUID();</span>
+    public static generateUUID = (): string =&gt; {
+        return crypto.randomUUID();
     };
 }</pre></td></tr></table></pre>
 
@@ -190,7 +190,7 @@ export class RandomUtils {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-07-17T08:35:12.309Z
+                at 2025-07-20T18:11:50.451Z
             </div>
         <script src="../prettify.js"></script>
         <script>
