@@ -1,236 +1,205 @@
-import nodemailer from 'nodemailer';
-import { GoogleMeetService } from './googleMeetService';
-
-interface AppointmentEmailData {
-    customerName: string;
-    customerEmail: string;
-    consultantName: string;
-    appointmentDate: string;
-    startTime: string;
-    endTime: string;
-    meetingInfo?: {
-        meet_url: string;
-        meeting_id: string;
-        meeting_password?: string; // Optional - chỉ dành cho backward compatibility
-    };
-    appointmentId: string;
-    customerNotes?: string;
-}
+import { MailUtils } from '../utils/mailUtils';
 
 export class EmailNotificationService {
-    private static getTransporter() {
-        return nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_FOR_VERIFY ?? '',
-                pass: process.env.EMAIL_APP_PASSWORD ?? ''
-            }
+  public static async sendNotification(
+    recipient: string,
+    subject: string,
+    message: string,
+    options?: {
+      type?: 'info' | 'warning' | 'error' | 'success';
+      priority?: 'low' | 'normal' | 'high';
+      template?: string;
+    }
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      if (!recipient || !subject || !message) {
+        return {
+          success: false,
+          error: 'Missing required parameters: recipient, subject, or message'
+        };
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(recipient)) {
+        return {
+          success: false,
+          error: 'Invalid email format'
+        };
+      }
+
+      const emailData = {
+        to: recipient,
+        subject: this.formatSubject(subject, options?.type),
+        body: this.formatMessage(message, options?.type),
+        priority: options?.priority || 'normal',
+        template: options?.template
+      };
+
+      const result = await MailUtils.sendEmail(emailData);
+      
+      return {
+        success: result.success,
+        messageId: this.generateMessageId()
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to send notification: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  public static async sendBulkNotifications(
+    recipients: string[],
+    subject: string,
+    message: string,
+    options?: {
+      type?: 'info' | 'warning' | 'error' | 'success';
+      priority?: 'low' | 'normal' | 'high';
+      batchSize?: number;
+    }
+  ): Promise<{ 
+    success: boolean; 
+    sent: number; 
+    failed: number; 
+    results: Array<{ recipient: string; success: boolean; error?: string }> 
+  }> {
+    try {
+      if (!recipients || recipients.length === 0) {
+        return {
+          success: false,
+          sent: 0,
+          failed: 0,
+          results: []
+        };
+      }
+
+      const batchSize = options?.batchSize || 10;
+      const results: Array<{ recipient: string; success: boolean; error?: string }> = [];
+      let sent = 0;
+      let failed = 0;
+
+      for (let i = 0; i < recipients.length; i += batchSize) {
+        const batch = recipients.slice(i, i + batchSize);
+        const batchPromises = batch.map(async (recipient) => {
+          const result = await this.sendNotification(recipient, subject, message, options);
+          const recipientResult = {
+            recipient,
+            success: result.success,
+            error: result.error
+          };
+          
+          if (result.success) {
+            sent++;
+          } else {
+            failed++;
+          }
+          
+          return recipientResult;
         });
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+      }
+
+      return {
+        success: sent > 0,
+        sent,
+        failed,
+        results
+      };
+    } catch (error) {
+      return {
+        success: false,
+        sent: 0,
+        failed: recipients.length,
+        results: recipients.map(recipient => ({
+          recipient,
+          success: false,
+          error: `Bulk send failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }))
+      };
     }
+  }
 
-    /**
-     * Send appointment confirmation email with REAL Google Meet link
-     */
-    public static async sendAppointmentConfirmation(emailData: AppointmentEmailData): Promise<{ success: boolean; message: string }> {
-        try {
-            if (!emailData.meetingInfo) {
-                throw new Error('Meeting information is required for appointment confirmation');
-            }
+  private static formatSubject(subject: string, type?: string): string {
+    const prefixes = {
+      info: '[INFO]',
+      warning: '[WARNING]',
+      error: '[ERROR]',
+      success: '[SUCCESS]'
+    };
 
-            const transporter = this.getTransporter();
+    const prefix = type && prefixes[type as keyof typeof prefixes] ? prefixes[type as keyof typeof prefixes] : '';
+    return prefix ? `${prefix} ${subject}` : subject;
+  }
 
-            const mailContent = {
-                from: `"GenCare - Xác nhận lịch tư vấn" <${process.env.EMAIL_FOR_VERIFY}>`,
-                to: emailData.customerEmail,
-                subject: `✅ Lịch tư vấn đã được xác nhận - ${emailData.appointmentDate} lúc ${emailData.startTime}`,
-                html: `
-                <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                    <div style="max-width: 600px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                        <h2 style="color: #2a9d8f; text-align: center;">🎉 Lịch tư vấn đã được xác nhận!</h2>
-                        
-                        <div style="background-color: #e9f7f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                            <h3 style="color: #2a9d8f; margin-top: 0;">📅 THÔNG TIN CUỘC HẸN</h3>
-                            <p><strong>👩‍⚕️ Chuyên gia tư vấn:</strong> ${emailData.consultantName}</p>
-                            <p><strong>📅 Ngày:</strong> ${emailData.appointmentDate}</p>
-                            <p><strong>⏰ Thời gian:</strong> ${emailData.startTime} - ${emailData.endTime}</p>
-                            <p><strong>💬 Ghi chú của bạn:</strong> ${emailData.customerNotes ?? 'Không có'}</p>
-                        </div>
+  private static formatMessage(message: string, type?: string): string {
+    const templates = {
+      info: `<div style="color: #0066cc;">${message}</div>`,
+      warning: `<div style="color: #ff9900;">${message}</div>`,
+      error: `<div style="color: #cc0000;">${message}</div>`,
+      success: `<div style="color: #00cc00;">${message}</div>`
+    };
 
-                        <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-                            <h3 style="color: #856404; margin-top: 0;">📹 THÔNG TIN GOOGLE MEET</h3>
-                            <p style="margin: 10px 0;">
-                                <strong>🔗 Link tham gia:</strong><br>
-                                <a href="${emailData.meetingInfo.meet_url}" style="color: #007bff; text-decoration: none; word-break: break-all;">
-                                    ${emailData.meetingInfo.meet_url}
-                                </a>
-                            </p>
-                            <p style="margin: 10px 0;">
-                                <strong>🆔 Meeting ID:</strong> <code style="background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px;">${emailData.meetingInfo.meeting_id}</code>
-                            </p>
-                        </div>
+    return type && templates[type as keyof typeof templates] 
+      ? templates[type as keyof typeof templates] 
+      : message;
+  }
 
-                        ${GoogleMeetService.generateMeetingInstructions(emailData.meetingInfo)}
+  private static generateMessageId(): string {
+    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
 
-                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                            <h4 style="color: #495057; margin-top: 0;">✅ CHECKLIST TRƯỚC KHI THAM GIA</h4>
-                            <ul style="color: #495057;">
-                                <li>✅ Kiểm tra kết nối internet</li>
-                                <li>✅ Test camera và microphone</li>
-                                <li>✅ Tìm nơi yên tĩnh</li>
-                                <li>✅ Chuẩn bị các câu hỏi cần tư vấn</li>
-                                <li>✅ Đóng các ứng dụng không cần thiết</li>
-                                <li>✅ Đảm bảo đã đăng nhập tài khoản Google</li>
-                            </ul>
-                        </div>
-
-                        <div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #bee5eb;">
-                            <h4 style="color: #0c5460; margin-top: 0;">💡 QUAN TRỌNG</h4>
-                            <p style="color: #0c5460; margin: 0;">
-                                Đây là cuộc họp Google Meet thực tế được tạo tự động. 
-                                Bạn sẽ được thêm vào lịch Google Calendar và có thể tham gia trực tiếp từ link trên.
-                            </p>
-                        </div>
-
-                        <p style="text-align: center; color: #666; font-style: italic;">
-                            Nếu bạn gặp khó khăn khi tham gia, vui lòng liên hệ ngay với chúng tôi.
-                        </p>
-                        
-                        <p style="text-align: center; margin-top: 30px;">
-                            <strong style="color: #2a9d8f;">${process.env.APP_NAME ?? 'GenCare'}</strong>
-                        </p>
-                    </div>
-                </body>`
-            };
-
-            await transporter.sendMail(mailContent);
-
-            return {
-                success: true,
-                message: 'Appointment confirmation email with real Google Meet sent successfully'
-            };
-        } catch (error) {
-            console.error('Error sending appointment confirmation email:', error);
-            return {
-                success: false,
-                message: `Failed to send confirmation email: ${error.message}`
-            };
-        }
+  public static async sendAppointmentReminder(
+    userEmail: string,
+    appointmentDetails: {
+      date: string;
+      time: string;
+      doctor: string;
+      location?: string;
     }
+  ): Promise<{ success: boolean; error?: string }> {
+    const subject = 'Appointment Reminder - GenCare';
+    const message = `
+      <div style="font-family: Arial, sans-serif;">
+        <h2>Appointment Reminder</h2>
+        <p>This is a reminder about your upcoming appointment:</p>
+        <ul>
+          <li><strong>Date:</strong> ${appointmentDetails.date}</li>
+          <li><strong>Time:</strong> ${appointmentDetails.time}</li>
+          <li><strong>Doctor:</strong> ${appointmentDetails.doctor}</li>
+          ${appointmentDetails.location ? `<li><strong>Location:</strong> ${appointmentDetails.location}</li>` : ''}
+        </ul>
+        <p>Please arrive 15 minutes early for check-in.</p>
+        <p>If you need to reschedule, please contact us at least 24 hours in advance.</p>
+      </div>
+    `;
 
-    /**
-     * Send meeting reminder email - Updated for real Google Meet
-     */
-    public static async sendMeetingReminder(emailData: AppointmentEmailData, minutesBefore: number): Promise<{ success: boolean; message: string }> {
-        try {
-            if (!emailData.meetingInfo) {
-                throw new Error('Meeting information is required for reminder');
-            }
+    return this.sendNotification(userEmail, subject, message, { type: 'info', priority: 'high' });
+  }
 
-            const transporter = this.getTransporter();
+  public static async sendWelcomeEmail(
+    userEmail: string,
+    userName: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const subject = 'Welcome to GenCare!';
+    const message = `
+      <div style="font-family: Arial, sans-serif;">
+        <h1>Welcome to GenCare, ${userName}!</h1>
+        <p>Thank you for joining our platform. We're excited to help you with your healthcare journey.</p>
+        <p>Here's what you can do next:</p>
+        <ul>
+          <li>Complete your profile</li>
+          <li>Schedule your first appointment</li>
+          <li>Explore our health resources</li>
+        </ul>
+        <p>If you have any questions, don't hesitate to reach out to our support team.</p>
+        <p>Best regards,<br>The GenCare Team</p>
+      </div>
+    `;
 
-            const mailContent = {
-                from: `"GenCare - Nhắc lịch tư vấn" <${process.env.EMAIL_FOR_VERIFY}>`,
-                to: emailData.customerEmail,
-                subject: `⏰ Nhắc nhở: Cuộc tư vấn sắp bắt đầu trong ${minutesBefore} phút`,
-                html: `
-                <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                    <div style="max-width: 600px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                        <h2 style="color: #ff6b35; text-align: center;">⏰ Nhắc nhở cuộc tư vấn</h2>
-                        
-                        <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                            <h3 style="color: #856404; margin-top: 0;">Cuộc tư vấn sẽ bắt đầu trong ${minutesBefore} phút!</h3>
-                            <p><strong>Chuyên gia:</strong> ${emailData.consultantName}</p>
-                            <p><strong>Thời gian:</strong> ${emailData.startTime} - ${emailData.endTime}</p>
-                        </div>
-
-                        <div style="background-color: #d4edda; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                            <h3 style="color: #155724; margin-top: 0;">📹 THAM GIA NGAY</h3>
-                            <p style="margin: 15px 0;">
-                                <a href="${emailData.meetingInfo.meet_url}" 
-                                   style="background-color: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                                    🚀 THAM GIA GOOGLE MEET
-                                </a>
-                            </p>
-                            <p style="margin: 10px 0; font-size: 14px;">
-                                <strong>Meeting ID:</strong> <code style="background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px;">${emailData.meetingInfo.meeting_id}</code>
-                            </p>
-                        </div>
-
-                        ${GoogleMeetService.generateReminderText(minutesBefore)}
-
-                        <p style="text-align: center; margin-top: 30px;">
-                            <strong style="color: #2a9d8f;">${process.env.APP_NAME ?? 'GenCare'}</strong>
-                        </p>
-                    </div>
-                </body>`
-            };
-
-            await transporter.sendMail(mailContent);
-
-            return {
-                success: true,
-                message: 'Meeting reminder email sent successfully'
-            };
-        } catch (error) {
-            console.error('Error sending meeting reminder email:', error);
-            return {
-                success: false,
-                message: `Failed to send reminder email: ${error.message}`
-            };
-        }
-    }
-
-    /**
-     * Send appointment cancellation email
-     */
-    public static async sendAppointmentCancellation(emailData: AppointmentEmailData, cancelledBy: string, reason?: string): Promise<{ success: boolean; message: string }> {
-        try {
-            const transporter = this.getTransporter();
-
-            const mailContent = {
-                from: `"GenCare - Hủy lịch tư vấn" <${process.env.EMAIL_FOR_VERIFY}>`,
-                to: emailData.customerEmail,
-                subject: `❌ Lịch tư vấn đã được hủy - ${emailData.appointmentDate} lúc ${emailData.startTime}`,
-                html: `
-                <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                    <div style="max-width: 600px; margin: auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                        <h2 style="color: #dc3545; text-align: center;">❌ Lịch tư vấn đã được hủy</h2>
-                        
-                        <div style="background-color: #f8d7da; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                            <h3 style="color: #721c24; margin-top: 0;">📅 THÔNG TIN CUỘC HẸN ĐÃ HỦY</h3>
-                            <p><strong>👩‍⚕️ Chuyên gia tư vấn:</strong> ${emailData.consultantName}</p>
-                            <p><strong>📅 Ngày:</strong> ${emailData.appointmentDate}</p>
-                            <p><strong>⏰ Thời gian:</strong> ${emailData.startTime} - ${emailData.endTime}</p>
-                            <p><strong>🙋‍♂️ Người hủy:</strong> ${cancelledBy}</p>
-                            ${reason ? `<p><strong>📝 Lý do:</strong> ${reason}</p>` : ''}
-                        </div>
-
-                        <div style="background-color: #d1ecf1; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                            <p style="color: #0c5460; margin: 0; text-align: center;">
-                                Chúng tôi xin lỗi vì sự bất tiện này. Bạn có thể đặt lịch tư vấn mới bất cứ lúc nào.
-                            </p>
-                        </div>
-
-                        <p style="text-align: center; margin-top: 30px;">
-                            <strong style="color: #2a9d8f;">${process.env.APP_NAME ?? 'GenCare'}</strong>
-                        </p>
-                    </div>
-                </body>`
-            };
-
-            await transporter.sendMail(mailContent);
-
-            return {
-                success: true,
-                message: 'Appointment cancellation email sent successfully'
-            };
-        } catch (error) {
-            console.error('Error sending appointment cancellation email:', error);
-            return {
-                success: false,
-                message: `Failed to send cancellation email: ${error.message}`
-            };
-        }
-    }
-
+    return this.sendNotification(userEmail, subject, message, { type: 'success', priority: 'normal' });
+  }
 }

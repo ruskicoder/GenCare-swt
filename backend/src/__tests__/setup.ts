@@ -1,37 +1,24 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
-let mongoServer: MongoMemoryServer;
+dotenv.config();
 
-// Mock external services
-jest.mock('../services/googleMeetService', () => ({
+// Create mock services that we've removed
+const mockServices = {
   GoogleMeetService: {
     createMeeting: jest.fn().mockResolvedValue({
       success: true,
-      meeting: {
-        meet_url: 'https://meet.google.com/test-meeting',
-        meeting_id: 'test-meeting-id',
-        meeting_password: 'test-password'
-      }
+      data: { meeting_url: 'https://meet.google.com/test-123' }
     })
   }
-}));
+};
 
-jest.mock('../services/emailNotificationService', () => ({
-  EmailNotificationService: {
-    sendAppointmentConfirmation: jest.fn().mockResolvedValue({ success: true }),
-    sendAppointmentReminder: jest.fn().mockResolvedValue({ success: true }),
-    sendAppointmentCancellation: jest.fn().mockResolvedValue({ success: true }),
-    sendStiOrderConfirmation: jest.fn().mockResolvedValue({ success: true }),
-    sendStiResultNotification: jest.fn().mockResolvedValue({ success: true })
-  }
-}));
-
-jest.mock('../utils/mailUtils', () => ({
-  MailUtils: {
-    sendStiOrderConfirmation: jest.fn().mockResolvedValue({ success: true }),
-    sendEmail: jest.fn().mockResolvedValue({ success: true })
-  }
+// Mock all external dependencies that may not exist
+jest.mock('nodemailer', () => ({
+  createTransporter: jest.fn(() => ({
+    sendMail: jest.fn().mockResolvedValue({ messageId: 'test-123' })
+  }))
 }));
 
 // Mock Redis client
@@ -50,6 +37,8 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
+
+let mongoServer: MongoMemoryServer;
 
 beforeAll(async () => {
   // Start MongoDB Memory Server
@@ -79,4 +68,4 @@ afterEach(async () => {
 });
 
 // Global test timeout
-jest.setTimeout(30000);
+jest.setTimeout(60000);

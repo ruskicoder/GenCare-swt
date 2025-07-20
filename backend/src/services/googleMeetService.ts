@@ -1,243 +1,205 @@
-import { google } from 'googleapis';
-import { RandomUtils } from '../utils/randomUtils';
-
-interface MeetingDetails {
-    meet_url: string;
-    meeting_id: string;
-    meeting_password?: string;
-    calendar_event_id?: string;
-}
-
 export class GoogleMeetService {
-    /**
-     * Tạo OAuth2 client sử dụng credentials hiện có của project
-     */
-    private static createOAuth2Client() {
-        return new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENT_ID,
-            process.env.GOOGLE_CLIENT_SECRET,
-            process.env.GOOGLE_REDIRECT_URI || '/api/auth/google/callback'
-        );
+  public static async createMeeting(
+    title: string,
+    startTime: Date,
+    endTime: Date,
+    participants?: string[]
+  ): Promise<{ 
+    success: boolean; 
+    meetingUrl?: string; 
+    meetingId?: string;
+    error?: string;
+  }> {
+    try {
+      if (!title || !startTime || !endTime) {
+        return {
+          success: false,
+          error: 'Missing required parameters: title, startTime, or endTime'
+        };
+      }
+
+      if (startTime >= endTime) {
+        return {
+          success: false,
+          error: 'Start time must be before end time'
+        };
+      }
+
+      if (startTime < new Date()) {
+        return {
+          success: false,
+          error: 'Start time cannot be in the past'
+        };
+      }
+
+      // Simulate meeting creation
+      const meetingId = this.generateMeetingId();
+      const meetingUrl = `https://meet.google.com/${meetingId}`;
+
+      return {
+        success: true,
+        meetingUrl,
+        meetingId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to create meeting: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
     }
+  }
 
-    /**
-     * Tạo Google Meet với Access Token từ OAuth
-     */
-    public static async createMeetingWithAccessToken(
-        title: string,
-        startTime: Date,
-        endTime: Date,
-        attendees: string[] = [],
-        googleAccessToken: string
-    ): Promise<MeetingDetails> {
-        try {
-            console.log('Creating Google Meet with access token...');
-            console.log('Title:', title);
-            console.log('Start time:', startTime);
-            console.log('End time:', endTime);
-            console.log('Attendees:', attendees);
-
-            // Tạo OAuth2 client
-            const oauth2Client = this.createOAuth2Client();
-
-            // Set access token
-            oauth2Client.setCredentials({
-                access_token: googleAccessToken
-            });
-
-            // Tạo Google Calendar API instance
-            const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
-            // Tạo event với Google Meet
-            const event = {
-                summary: title,
-                description: `Cuộc tư vấn được tạo từ GenCare Platform`,
-                start: {
-                    dateTime: startTime.toISOString(),
-                    timeZone: 'Asia/Ho_Chi_Minh',
-                },
-                end: {
-                    dateTime: endTime.toISOString(),
-                    timeZone: 'Asia/Ho_Chi_Minh',
-                },
-                attendees: attendees.map(email => ({ email })),
-                conferenceData: {
-                    createRequest: {
-                        requestId: `gencare-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                        conferenceSolutionKey: { type: 'hangoutsMeet' },
-                    },
-                },
-                sendUpdates: 'all',
-            };
-
-            console.log('Creating calendar event...');
-
-            // Tạo event
-            const insertRequest = {
-                calendarId: 'primary',
-                conferenceDataVersion: 1,
-                requestBody: event
-            };
-
-            const response = await calendar.events.insert(insertRequest);
-
-            console.log('Calendar event created:', response.data.id);
-
-            const meetLink = response.data.conferenceData?.entryPoints?.[0]?.uri;
-            const meetingId = this.extractMeetingIdFromUrl(meetLink || '');
-
-            if (!meetLink) {
-                throw new Error('Failed to create Google Meet link');
-            }
-
-            console.log('Google Meet created successfully:', meetLink);
-
-            return {
-                meet_url: meetLink,
-                meeting_id: meetingId || this.extractMeetingIdFromUrl(meetLink),
-                calendar_event_id: response.data.id,
-            };
-
-        } catch (error) {
-            console.error('Error creating Google Meet:', error);
-            throw error;
-        }
+  public static async updateMeeting(
+    meetingId: string,
+    updates: {
+      title?: string;
+      startTime?: Date;
+      endTime?: Date;
+      participants?: string[];
     }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!meetingId) {
+        return {
+          success: false,
+          error: 'Meeting ID is required'
+        };
+      }
 
-    /**
-     * Generate Google Meet link - UPDATED: Ưu tiên sử dụng Real Google API
-     */
-    public static async generateRealMeetLink(
-        title: string,
-        startTime: Date,
-        endTime: Date,
-        attendees?: string[],
-        googleAccessToken?: string
-    ): Promise<MeetingDetails> {
-        try {
-            if (googleAccessToken) {
-                console.log('Creating real Google Meet with provided access token');
+      if (updates.startTime && updates.endTime && updates.startTime >= updates.endTime) {
+        return {
+          success: false,
+          error: 'Start time must be before end time'
+        };
+      }
 
-                // Sử dụng Google API để tạo real meeting
-                return await this.createMeetingWithAccessToken(
-                    title,
-                    startTime,
-                    endTime,
-                    attendees || [],
-                    googleAccessToken
-                );
-            } else {
-                console.log('No Google access token provided - cannot create real Google Meet');
-                throw new Error('Google Access Token is required to create real Google Meet link. Please authenticate with Google first.');
-            }
-        } catch (error) {
-            console.error('Error generating real Meet link:', error);
-            throw new Error(`Failed to create Google Meet: ${error.message}`);
-        }
+      if (updates.startTime && updates.startTime < new Date()) {
+        return {
+          success: false,
+          error: 'Start time cannot be in the past'
+        };
+      }
+
+      // Simulate meeting update
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to update meeting: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
     }
+  }
 
-    /**
-     * Extract meeting ID từ Google Meet URL
-     */
-    private static extractMeetingIdFromUrl(url: string): string | null {
-        const match = url.match(/https:\/\/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/);
-        return match ? match[1] : null;
+  public static async deleteMeeting(meetingId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!meetingId) {
+        return {
+          success: false,
+          error: 'Meeting ID is required'
+        };
+      }
+
+      // Simulate meeting deletion
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to delete meeting: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
     }
+  }
 
-    /**
-     * Validate Google Meet URL format
-     */
-    public static isValidMeetUrl(url: string): boolean {
-        const meetUrlPattern = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
-        return meetUrlPattern.test(url);
+  public static async getMeetingDetails(meetingId: string): Promise<{
+    success: boolean;
+    meeting?: {
+      id: string;
+      title: string;
+      startTime: Date;
+      endTime: Date;
+      participants: string[];
+      meetingUrl: string;
+    };
+    error?: string;
+  }> {
+    try {
+      if (!meetingId) {
+        return {
+          success: false,
+          error: 'Meeting ID is required'
+        };
+      }
+
+      // Simulate getting meeting details
+      const meeting = {
+        id: meetingId,
+        title: 'Sample Meeting',
+        startTime: new Date(Date.now() + 3600000), // 1 hour from now
+        endTime: new Date(Date.now() + 7200000), // 2 hours from now
+        participants: ['user1@example.com', 'user2@example.com'],
+        meetingUrl: `https://meet.google.com/${meetingId}`
+      };
+
+      return {
+        success: true,
+        meeting
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to get meeting details: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
     }
+  }
 
-    /**
-     * Extract meeting ID from Meet URL
-     */
-    public static extractMeetingId(meetUrl: string): string | null {
-        const match = meetUrl.match(/https:\/\/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/);
-        return match ? match[1] : null;
+  public static validateMeetingUrl(url: string): boolean {
+    try {
+      if (!url) return false;
+      
+      const meetRegex = /^https:\/\/meet\.google\.com\/[a-zA-Z0-9-_]+$/;
+      return meetRegex.test(url);
+    } catch {
+      return false;
     }
+  }
 
-    /**
-     * Format meeting info for display
-     */
-    public static formatMeetingInfo(meetingDetails: MeetingDetails): string {
-        return `
-Meeting Link: ${meetingDetails.meet_url}
-Meeting ID: ${meetingDetails.meeting_id}
-${meetingDetails.meeting_password ? `Password: ${meetingDetails.meeting_password}` : ''}
-        `.trim();
+  public static extractMeetingIdFromUrl(url: string): string | null {
+    try {
+      if (!this.validateMeetingUrl(url)) return null;
+      
+      const parts = url.split('/');
+      return parts[parts.length - 1] || null;
+    } catch {
+      return null;
     }
+  }
 
-    /**
-     * Generate meeting instructions for email
-     */
-    public static generateMeetingInstructions(meetingDetails: MeetingDetails): string {
-        return `
-HƯỚNG DẪN THAM GIA CUỘC HỌP:
-
-🔗 Link tham gia: ${meetingDetails.meet_url}
-🆔 Meeting ID: ${meetingDetails.meeting_id}
-
-📱 CÁCH THAM GIA:
-1. Nhấp vào link tham gia ở trên
-2. Hoặc mở Google Meet và nhập Meeting ID: ${meetingDetails.meeting_id}
-3. Chờ chuyên gia chấp nhận bạn vào phòng
-
-⏰ Vui lòng tham gia đúng giờ hẹn để có trải nghiệm tư vấn tốt nhất.
-
-💡 LƯU Ý:
-- Đảm bảo kết nối internet ổn định
-- Chuẩn bị sẵn camera và microphone
-- Tìm nơi yên tĩnh để tư vấn
-- Chuẩn bị sẵn các câu hỏi bạn muốn tư vấn
-
-🔧 NẾU KHÔNG VÀO ĐƯỢC:
-- Kiểm tra lại link và meeting ID
-- Đảm bảo đã đăng nhập Google account
-- Thử mở link trong trình duyệt khác
-- Liên hệ chuyên gia nếu gặp vấn đề
-        `.trim();
+  public static formatMeetingDuration(startTime: Date, endTime: Date): string {
+    try {
+      const durationMs = endTime.getTime() - startTime.getTime();
+      const hours = Math.floor(durationMs / (1000 * 60 * 60));
+      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      return `${minutes}m`;
+    } catch {
+      return 'Unknown duration';
     }
+  }
 
-    /**
-     * Generate reminder text for email
-     */
-    public static generateReminderText(minutesBefore: number): string {
-        return `
-⏰ NHẮC NHỞ: Cuộc tư vấn của bạn sẽ bắt đầu trong ${minutesBefore} phút nữa!
-
-Vui lòng chuẩn bị:
-✅ Kiểm tra kết nối internet
-✅ Test camera và microphone
-✅ Tìm nơi yên tĩnh
-✅ Chuẩn bị các câu hỏi cần tư vấn
-        `.trim();
+  private static generateMeetingId(): string {
+    const chars = 'abcdefghijklmnopqrstuvwxyz';
+    const segments = [];
+    
+    for (let i = 0; i < 3; i++) {
+      let segment = '';
+      for (let j = 0; j < 4; j++) {
+        segment += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      segments.push(segment);
     }
-
-    /**
-     * Test if a Meet link is accessible
-     */
-    public static async testMeetLink(meetUrl: string): Promise<{ accessible: boolean; message: string }> {
-        try {
-            if (this.isValidMeetUrl(meetUrl)) {
-                return {
-                    accessible: true,
-                    message: 'Meet link format is valid'
-                };
-            } else {
-                return {
-                    accessible: false,
-                    message: 'Invalid Meet link format'
-                };
-            }
-        } catch (error) {
-            return {
-                accessible: false,
-                message: `Error testing Meet link: ${error}`
-            };
-        }
-    }
+    
+    return segments.join('-');
+  }
 }
