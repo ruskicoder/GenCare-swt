@@ -1,72 +1,58 @@
 import crypto from 'crypto';
 
 export class EncryptionUtils {
-  private static readonly ALGORITHM = 'aes-256-cbc';
-  private static readonly KEY_LENGTH = 32;
-  private static readonly IV_LENGTH = 16;
-
-  public static generateKey(): string {
-    return crypto.randomBytes(this.KEY_LENGTH).toString('hex');
+  /**
+   * Hashes a password using SHA-256
+   */
+  static async hashPassword(password: string): Promise<string> {
+    return crypto.createHash('sha256').update(password).digest('hex');
   }
 
-  public static generateSalt(): string {
-    return crypto.randomBytes(16).toString('hex');
+  /**
+   * Compares a password with its hash
+   */
+  static async comparePassword(password: string, hash: string): Promise<boolean> {
+    const passwordHash = await this.hashPassword(password);
+    return passwordHash === hash;
   }
 
-  public static hashPassword(password: string, salt?: string): {
-    hash: string;
-    salt: string;
-  } {
+  /**
+   * Generates a random salt
+   */
+  static generateSalt(length: number = 16): string {
+    return crypto.randomBytes(length).toString('hex');
+  }
+
+  /**
+   * Hashes data with salt using SHA-256
+   */
+  static hashWithSalt(data: string, salt: string): string {
+    return crypto.createHash('sha256').update(data + salt).digest('hex');
+  }
+
+  /**
+   * Generates a random key for encryption
+   */
+  static generateKey(length: number = 32): string {
+    return crypto.randomBytes(length).toString('hex');
+  }
+
+  /**
+   * Simple encrypt function using AES-256-CBC
+   */
+  static encrypt(text: string, key?: string): { encrypted: string; key: string; iv: string } {
     try {
-      if (!password) {
-        throw new Error('Password is required');
-      }
-
-      const useSalt = salt || this.generateSalt();
-      const hash = crypto.pbkdf2Sync(password, useSalt, 100000, 64, 'sha512').toString('hex');
-
-      return {
-        hash,
-        salt: useSalt
-      };
-    } catch (error) {
-      throw new Error(`Failed to hash password: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  public static verifyPassword(password: string, hash: string, salt: string): boolean {
-    try {
-      if (!password || !hash || !salt) {
-        return false;
-      }
-
-      const computedHash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-      return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(computedHash, 'hex'));
-    } catch {
-      return false;
-    }
-  }
-
-  public static encrypt(text: string, key?: string): {
-    encrypted: string;
-    key: string;
-    iv: string;
-  } {
-    try {
-      if (!text) {
-        throw new Error('Text to encrypt is required');
-      }
-
-      const encryptionKey = key ? Buffer.from(key, 'hex') : crypto.randomBytes(this.KEY_LENGTH);
-      const iv = crypto.randomBytes(this.IV_LENGTH);
-      const cipher = crypto.createCipher(this.ALGORITHM, encryptionKey);
-
+      const encryptionKey = key || this.generateKey();
+      const iv = crypto.randomBytes(16);
+      
+      // Use createCipheriv instead of deprecated createCipher
+      const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(encryptionKey, 'hex'), iv);
       let encrypted = cipher.update(text, 'utf8', 'hex');
       encrypted += cipher.final('hex');
-
+      
       return {
         encrypted,
-        key: encryptionKey.toString('hex'),
+        key: encryptionKey,
         iv: iv.toString('hex')
       };
     } catch (error) {
@@ -74,86 +60,74 @@ export class EncryptionUtils {
     }
   }
 
-  public static decrypt(encrypted: string, key: string, iv: string): string {
+  /**
+   * Simple decrypt function using AES-256-CBC
+   */
+  static decrypt(encryptedData: string, key: string, iv: string): string {
     try {
-      if (!encrypted || !key || !iv) {
-        throw new Error('All parameters (encrypted, key, iv) are required');
-      }
-
-      const decipher = crypto.createDecipher(this.ALGORITHM, Buffer.from(key, 'hex'));
-
-      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), Buffer.from(iv, 'hex'));
+      let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
-
       return decrypted;
     } catch (error) {
       throw new Error(`Failed to decrypt: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  public static generateHash(data: string, algorithm: 'md5' | 'sha1' | 'sha256' | 'sha512' = 'sha256'): string {
-    try {
-      if (!data) {
-        throw new Error('Data to hash is required');
-      }
-
-      return crypto.createHash(algorithm).update(data).digest('hex');
-    } catch (error) {
-      throw new Error(`Failed to generate hash: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  /**
+   * Creates HMAC signature
+   */
+  static createHMAC(data: string, secret: string): string {
+    return crypto.createHmac('sha256', secret).update(data).digest('hex');
   }
 
-  public static generateHMAC(data: string, secret: string, algorithm: 'sha1' | 'sha256' | 'sha512' = 'sha256'): string {
+  /**
+   * Verifies HMAC signature
+   */
+  static verifyHMAC(data: string, signature: string, secret: string): boolean {
     try {
-      if (!data || !secret) {
-        throw new Error('Data and secret are required');
-      }
-
-      return crypto.createHmac(algorithm, secret).update(data).digest('hex');
-    } catch (error) {
-      throw new Error(`Failed to generate HMAC: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  public static validateKeyLength(key: string): boolean {
-    try {
-      if (!key) return false;
-      const buffer = Buffer.from(key, 'hex');
-      return buffer.length === this.KEY_LENGTH;
-    } catch {
-      return false;
-    }
-  }
-
-  public static isValidHash(hash: string, algorithm: 'md5' | 'sha1' | 'sha256' | 'sha512'): boolean {
-    try {
-      if (!hash) return false;
+      const expected = this.createHMAC(data, secret);
       
-      const expectedLengths = {
-        md5: 32,
-        sha1: 40,
-        sha256: 64,
-        sha512: 128
-      };
-
-      return hash.length === expectedLengths[algorithm] && /^[a-f0-9]+$/i.test(hash);
-    } catch {
-      return false;
-    }
-  }
-
-  public static secureCompare(a: string, b: string): boolean {
-    try {
-      if (!a || !b || a.length !== b.length) {
+      // Convert to buffers
+      const signatureBuffer = Buffer.from(signature, 'hex');
+      const expectedBuffer = Buffer.from(expected, 'hex');
+      
+      // Check if buffers have the same length
+      if (signatureBuffer.length !== expectedBuffer.length) {
         return false;
       }
-
-      const bufferA = Buffer.from(a);
-      const bufferB = Buffer.from(b);
       
-      return crypto.timingSafeEqual(bufferA, bufferB);
+      return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Generates a random UUID
+   */
+  static generateUUID(): string {
+    return crypto.randomUUID();
+  }
+
+  /**
+   * Creates a secure random token
+   */
+  static generateSecureToken(length: number = 32): string {
+    return crypto.randomBytes(length).toString('base64url');
+  }
+
+  /**
+   * Hash data using SHA-256
+   */
+  static hash(data: string): string {
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  /**
+   * Hash data using MD5 (for compatibility)
+   */
+  static md5(data: string): string {
+    return crypto.createHash('md5').update(data).digest('hex');
   }
 }

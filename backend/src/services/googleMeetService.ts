@@ -173,16 +173,33 @@ export class GoogleMeetService {
     }
   }
 
-  public static formatMeetingDuration(startTime: Date, endTime: Date): string {
+  /**
+   * Formats meeting duration in a human-readable format
+   */
+  static formatMeetingDuration(startTime: Date, endTime: Date): string {
     try {
-      const durationMs = endTime.getTime() - startTime.getTime();
-      const hours = Math.floor(durationMs / (1000 * 60 * 60));
-      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-      
-      if (hours > 0) {
-        return `${hours}h ${minutes}m`;
+      // Validate that the dates are valid
+      if (!startTime || !endTime || isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        return 'Unknown duration';
       }
-      return `${minutes}m`;
+
+      const durationMs = endTime.getTime() - startTime.getTime();
+      
+      if (durationMs <= 0) {
+        return 'Invalid duration';
+      }
+
+      const minutes = Math.floor(durationMs / (1000 * 60));
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+
+      if (hours === 0) {
+        return `${minutes}m`;
+      } else if (remainingMinutes === 0) {
+        return `${hours}h`;
+      } else {
+        return `${hours}h ${remainingMinutes}m`;
+      }
     } catch {
       return 'Unknown duration';
     }
