@@ -1670,27 +1670,19 @@ export class AppointmentService {
         endDate?: Date
     ): Promise<AppointmentResponse> {
         try {
-            // Build basic filter
-            const filters: any = {};
-
-            if (status) {
-                filters.status = status;
+            // Adjust end date to include the entire day
+            let adjustedEndDate = endDate;
+            if (endDate) {
+                adjustedEndDate = new Date(endDate);
+                adjustedEndDate.setHours(23, 59, 59, 999);
             }
 
-            if (startDate || endDate) {
-                filters.appointment_date = {};
-                if (startDate) {
-                    filters.appointment_date.$gte = startDate;
-                }
-                if (endDate) {
-                    const endOfDay = new Date(endDate);
-                    endOfDay.setHours(23, 59, 59, 999);
-                    filters.appointment_date.$lte = endOfDay;
-                }
-            }
-
-            // Get appointments using repository
-            const appointments = await AppointmentRepository.findAll(filters);
+            // Get appointments using repository with correct parameter order
+            const appointments = await AppointmentRepository.findAll(
+                status,
+                startDate,
+                adjustedEndDate
+            );
 
             return {
                 success: true,

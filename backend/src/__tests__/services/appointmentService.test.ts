@@ -136,16 +136,14 @@ describe('AppointmentService', () => {
 
   describe('getAllAppointments', () => {
     it('should get appointments with pagination', async () => {
-      const query = { page: 1, limit: 10 };
-      const result = await AppointmentService.getAllAppointments(query);
+      const result = await AppointmentService.getAllAppointments('pending');
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
     });
 
     it('should handle empty appointment list', async () => {
-      const query = { page: 1, limit: 10 };
-      const result = await AppointmentService.getAllAppointments(query);
+      const result = await AppointmentService.getAllAppointments();
 
       expect(result.success).toBe(true);
     });
@@ -189,7 +187,7 @@ describe('AppointmentService', () => {
         status: 'confirmed' as const
       };
 
-      const result = await AppointmentService.updateAppointment(appointmentId!, testUser._id.toString(), updateData);
+      const result = await AppointmentService.updateAppointment(appointmentId!, updateData, testUser._id.toString());
 
       expect(result.success).toBe(true);
     });
@@ -197,7 +195,7 @@ describe('AppointmentService', () => {
     it('should fail with invalid appointment ID', async () => {
       const updateData = { customer_notes: 'Updated notes' };
       
-      const result = await AppointmentService.updateAppointment('invalid-id', testUser._id.toString(), updateData);
+      const result = await AppointmentService.updateAppointment('invalid-id', updateData, testUser._id.toString());
 
       expect(result.success).toBe(false);
     });
@@ -206,7 +204,7 @@ describe('AppointmentService', () => {
       const nonExistentId = new mongoose.Types.ObjectId().toString();
       const updateData = { customer_notes: 'Updated notes' };
       
-      const result = await AppointmentService.updateAppointment(nonExistentId, testUser._id.toString(), updateData);
+      const result = await AppointmentService.updateAppointment(nonExistentId, updateData, testUser._id.toString());
 
       expect(result.success).toBe(false);
     });
@@ -281,6 +279,9 @@ describe('AppointmentService', () => {
       );
       const bookResult = await AppointmentService.bookAppointment(appointmentData);
       const appointmentId = bookResult.data?.appointment._id.toString();
+      
+      // Confirm the appointment first
+      await AppointmentService.confirmAppointment(appointmentId!, testConsultant.user_id.toString());
       
       const result = await AppointmentService.completeAppointment(appointmentId!, testConsultant.user_id.toString());
 
